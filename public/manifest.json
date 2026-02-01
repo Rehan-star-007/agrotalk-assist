@@ -1,0 +1,17 @@
+{
+  "name": "AgroVoice",
+  "short_name": "AgroVoice",
+  "description": "Voice-first AI assistant for farmers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFAF5",
+  "theme_color": "#2D5016",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
