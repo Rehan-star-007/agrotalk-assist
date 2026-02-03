@@ -1,0 +1,190 @@
+{
+    "potato_disease": {
+        "disease_name": "Potato Infection (Tuber/Leaf)",
+        "disease_name_hindi": "आलू का रोग",
+        "severity": "high",
+        "description": "Signs of pathology detected on the potato. This could be Late Blight or Common Scab depending on the part affected.",
+        "description_hindi": "आलू पर रोग के लक्षण पाए गए हैं।",
+        "symptoms": [
+            "Dark, sunken lesions on the surface",
+            "Internal browning or rotting of tissue",
+            "Dry, corky texture in affected areas"
+        ],
+        "symptoms_hindi": [
+            "सतह पर गहरे, धंसे हुए घाव",
+            "अंदरूनी ऊतकों का भूरा होना या सड़ना",
+            "प्रभावित क्षेत्रों में सूखा और खुरदरापन"
+        ],
+        "treatment_steps": [
+            "Sort and remove all infected potatoes immediately",
+            "Apply copper-based treatment to remaining healthy stock",
+            "Reduce humidity in storage areas"
+        ],
+        "treatment_steps_hindi": [
+            "संक्रमित आलू को तुरंत अलग करें",
+            "स्वस्थ स्टॉक पर तांबा आधारित उपचार का प्रयोग करें",
+            "भंडारण क्षेत्रों में नमी कम करें"
+        ],
+        "organic_options": [
+            "Dusting with limestone powder",
+            "Storage in cool, dry sand",
+            "Spray with garlic and ginger extract"
+        ],
+        "organic_options_hindi": [
+            "चूना पत्थर के पाउडर का छिड़काव",
+            "ठंडी, सूखी रेत में भंडारण",
+            "लहसुन और अदरक के अर्क का छिड़काव"
+        ],
+        "prevention_tips": [
+            "Do not replant infected tubers",
+            "Avoid wounding during harvest",
+            "Use crop rotation with non-root crops"
+        ],
+        "prevention_tips_hindi": [
+            "संक्रमित आलू को दोबारा न लगाएं",
+            "कटाई के दौरान चोट लगने से बचाएं",
+            "फसल चक्र अपनाएं"
+        ]
+    },
+    "tomato_disease": {
+        "disease_name": "Tomato Pathogen",
+        "disease_name_hindi": "टमाटर का रोग",
+        "severity": "medium",
+        "description": "Symptoms found on the tomato crop. Common issues include Blight or Bacterial Spot.",
+        "description_hindi": "टमाटर की फसल में रोग के लक्षण।",
+        "symptoms": [
+            "Discolored spotting on the surface",
+            "Premature softening or wilting",
+            "Abnormal growth patterns"
+        ],
+        "symptoms_hindi": [
+            "सतह पर रंगहीन धब्बे",
+            "समय से पहले नरम होना या मुरझाना",
+            "असामान्य विकास"
+        ],
+        "treatment_steps": [
+            "Prune affected areas to stop spread",
+            "Improve ventilation between plants",
+            "Apply organic bio-fungicide"
+        ],
+        "treatment_steps_hindi": [
+            "फैलाव रोकने के लिए प्रभावित हिस्सों को काटें",
+            "हवा का संचार सुधारें",
+            "जैविक कवकनाशी का प्रयोग करें"
+        ],
+        "organic_options": [
+            "Baking soda and oil spray",
+            "Compost tea foliage spray",
+            "Neem-based emulsions"
+        ],
+        "organic_options_hindi": [
+            "बेकिंग सोडा और तेल का स्प्रे",
+            "कंपोस्ट टी का छिड़काव",
+            "नीम आधारित घोल"
+        ],
+        "prevention_tips": [
+            "Water at the base, not over the fruit",
+            "Keep the area free of weeds",
+            "Sterilize tools after pruning"
+        ],
+        "prevention_tips_hindi": [
+            "पौधों की जड़ में पानी दें",
+            "निराई-गुड़ाई नियमित करें",
+            "औजारों को साफ रखें"
+        ]
+    },
+    "apple_disease": {
+        "disease_name": "Apple Malady",
+        "disease_name_hindi": "सेब का रोग",
+        "severity": "high",
+        "description": "Detection of fungal or bacterial markers on the apple tree or fruit.",
+        "description_hindi": "सेब के पेड़ या फल पर संक्रमण।",
+        "symptoms": [
+            "Dark, scabby patches on fruit skin",
+            "Dull appearance and loss of texture",
+            "Curled or spotted leaves"
+        ],
+        "symptoms_hindi": [
+            "फल की त्वचा पर गहरे, खुरदरे धब्बे",
+            "बनावट का खराब होना",
+            "मुड़ी हुई या धब्बेदार पत्तियां"
+        ],
+        "treatment_steps": [
+            "Apply liquid lime sulfur",
+            "Remove fallen debris around tree",
+            "Improve air penetration by thinning"
+        ],
+        "treatment_steps_hindi": [
+            "लाइम सल्फर का प्रयोग करें",
+            "पेड़ के आस-पास का कचरा साफ करें",
+            "शाखाओं की छंटाई करें"
+        ],
+        "organic_options": [
+            "Sulfur-based organic spray",
+            "Diluted vinegar wash (mild cases)",
+            "Pruning infected twigs"
+        ],
+        "organic_options_hindi": [
+            "सल्फर आधारित जैविक स्प्रे",
+            "सिरके के घोल से धुलाई",
+            "संक्रमित टहनियों को काटना"
+        ],
+        "prevention_tips": [
+            "Select resistant varieties",
+            "Clean up orchard floor in autumn",
+            "Maintain proper tree spacing"
+        ],
+        "prevention_tips_hindi": [
+            "प्रतिरोधी किस्में चुनें",
+            "शरद ऋतु में बाग की सफाई करें",
+            "उचित दूरी बनाए रखें"
+        ]
+    },
+    "general_pathology": {
+        "disease_name": "Plant Health Anomaly",
+        "disease_name_hindi": "पौधे का रोग",
+        "severity": "medium",
+        "description": "The AI has detected irregular patterns on the plant tissue. This may indicate an early-stage fungal or bacterial infection.",
+        "description_hindi": "पौधे के ऊतकों पर अनियमित पैटर्न पाए गए हैं।",
+        "symptoms": [
+            "Localized discoloration or spots",
+            "Changes in surface texture",
+            "Mild wilting or sagging"
+        ],
+        "symptoms_hindi": [
+            "स्थानीय रंगहीनता या धब्बे",
+            "सतह की बनावट में बदलाव",
+            "हल्का मुरझाना"
+        ],
+        "treatment_steps": [
+            "Isolate the plant to prevent spread",
+            "Reduce moisture on the plant surface",
+            "Apply a general organic bio-protector"
+        ],
+        "treatment_steps_hindi": [
+            "फैलाव रोकने के लिए पौधे को अलग करें",
+            "सतह पर नमी कम करें",
+            "जैविक रक्षक का प्रयोग करें"
+        ],
+        "organic_options": [
+            "Neem oil spray (1% concentration)",
+            "Garlic-infused water spray",
+            "Mild soap and water solution"
+        ],
+        "organic_options_hindi": [
+            "नीम तेल का स्प्रे",
+            "लहसुन के पानी का छिड़काव",
+            "हल्के साबुन और पानी का घोल"
+        ],
+        "prevention_tips": [
+            "Inspect plants weekly",
+            "Avoid overcrowding",
+            "Maintain balanced soil nutrition"
+        ],
+        "prevention_tips_hindi": [
+            "साप्ताहिक निरीक्षण करें",
+            "ज्यादा भीड़ न होने दें",
+            "संतुलित पोषण दें"
+        ]
+    }
+}

@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+venv/
+__pycache__/
+*.pyc
+backend_py/venv/
+backend_py/__pycache__/
+
+# Secrets
+.env
+.env.local
+
+# Models
+*.pt
+*.weights
+*.h5
