@@ -1,6 +1,5 @@
-import { Play, Pause, Wheat, Leaf, Sun } from "lucide-react";
+import { Play, Pause, Clock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
 
 interface RecentQueryCardProps {
   id: string;
@@ -12,10 +11,10 @@ interface RecentQueryCardProps {
   isPlaying?: boolean;
 }
 
-const cropIcons = {
-  wheat: Wheat,
-  rice: Leaf,
-  general: Sun,
+const cropEmojis = {
+  wheat: "🌾",
+  rice: "🌿",
+  general: "🌱",
 };
 
 export function RecentQueryCard({
@@ -27,8 +26,6 @@ export function RecentQueryCard({
   onPlay,
   isPlaying = false,
 }: RecentQueryCardProps) {
-  const CropIcon = cropIcons[cropType];
-
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -42,37 +39,49 @@ export function RecentQueryCard({
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 card-shadow">
+    <div 
+      className={cn(
+        "group bg-card rounded-apple border border-border p-4",
+        "shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5",
+        "transition-all duration-200 cursor-pointer",
+        isPlaying && "border-primary/30 bg-green-wash"
+      )}
+    >
       <div className="flex items-start gap-3">
         {/* Crop Icon */}
-        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-          <CropIcon size={24} className="text-primary" />
+        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-wash flex items-center justify-center text-2xl">
+          {cropEmojis[cropType]}
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-foreground line-clamp-1">{query}</p>
-          <p className="text-muted-foreground text-sm line-clamp-2 mt-1">
+          <p className="font-semibold text-foreground line-clamp-1 text-body">{query}</p>
+          <p className="text-muted-foreground text-subhead line-clamp-2 mt-1">
             {response}
           </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            {formatTime(timestamp)}
-          </p>
+          <div className="flex items-center gap-1 mt-2 text-caption text-muted-foreground">
+            <Clock size={12} />
+            <span>{formatTime(timestamp)}</span>
+          </div>
         </div>
 
         {/* Play Button */}
         <button
-          onClick={() => onPlay(id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlay(id);
+          }}
           className={cn(
-            "flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all",
+            "flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200",
             "focus:outline-none focus:ring-2 focus:ring-primary/30",
+            "active:scale-95",
             isPlaying
-              ? "bg-primary text-primary-foreground"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              ? "bg-primary text-primary-foreground shadow-green"
+              : "bg-green-subtle text-primary hover:bg-primary hover:text-primary-foreground"
           )}
           aria-label={isPlaying ? "Pause" : "Play response"}
         >
-          {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
+          {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
         </button>
       </div>
     </div>

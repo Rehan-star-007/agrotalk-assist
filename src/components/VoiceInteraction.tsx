@@ -15,20 +15,22 @@ interface VoiceInteractionProps {
 
 const translations = {
   en: {
+    title: "Voice Assistant",
     listening: "Listening...",
-    thinking: "Thinking...",
-    tapToSpeak: "Tap to speak",
+    thinking: "Processing...",
+    tapToSpeak: "Tap the mic to ask a question",
     stopRecording: "Tap to stop",
     askAnother: "Ask another question",
     save: "Save",
     share: "Share",
-    showText: "Show text",
-    hideText: "Hide text",
+    showText: "Show transcript",
+    hideText: "Hide transcript",
   },
   hi: {
+    title: "वॉइस असिस्टेंट",
     listening: "सुन रहा हूँ...",
-    thinking: "सोच रहा हूँ...",
-    tapToSpeak: "बोलने के लिए टैप करें",
+    thinking: "प्रोसेसिंग...",
+    tapToSpeak: "सवाल पूछने के लिए माइक टैप करें",
     stopRecording: "रोकने के लिए टैप करें",
     askAnother: "एक और सवाल पूछें",
     save: "सहेजें",
@@ -45,7 +47,6 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
 
   const t = translations[language as keyof typeof translations] || translations.en;
 
-  // Demo response
   const demoResponse = language === "hi" 
     ? "आपकी गेहूं की फसल में पीले पत्ते पोषक तत्वों की कमी का संकेत हो सकते हैं। नाइट्रोजन युक्त खाद डालने की सलाह दी जाती है। सुबह के समय पानी देना सबसे अच्छा रहेगा।"
     : "The yellow leaves on your wheat crop may indicate nutrient deficiency. I recommend applying nitrogen-rich fertilizer. Watering in the morning hours would be most beneficial for your crop.";
@@ -53,14 +54,11 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
   const handleMicClick = () => {
     if (state === "idle" || state === "response") {
       setState("recording");
-      // Simulate recording for 3 seconds
       setTimeout(() => {
         setState("processing");
-        // Simulate processing for 2 seconds
         setTimeout(() => {
           setState("response");
           setIsPlaying(true);
-          // Auto-stop playing after 4 seconds
           setTimeout(() => setIsPlaying(false), 4000);
         }, 2000);
       }, 3000);
@@ -77,78 +75,78 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background animate-slide-in-right">
+    <div className="fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4">
+      <header className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
         <button
           onClick={onClose}
-          className="p-3 rounded-full hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95"
           aria-label="Close"
         >
-          <X size={24} />
+          <X size={20} />
         </button>
-        <h1 className="text-xl font-semibold">AgroVoice</h1>
-        <div className="w-12" /> {/* Spacer for centering */}
-      </div>
+        <h1 className="text-headline font-bold text-foreground">{t.title}</h1>
+        <div className="w-10" />
+      </header>
 
       {/* Main Content */}
-      <div className="flex flex-col items-center justify-center px-6 pt-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
+        {/* Idle State */}
+        {state === "idle" && (
+          <div className="text-center space-y-8 animate-fade-in">
+            {/* Voice Orb */}
+            <div className="relative w-48 h-48 mx-auto">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-breathing" />
+              <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green flex items-center justify-center">
+                <Mic className="w-16 h-16 text-primary-foreground" />
+              </div>
+            </div>
+            <p className="text-body text-muted-foreground max-w-xs">{t.tapToSpeak}</p>
+          </div>
+        )}
+
         {/* Recording State */}
         {state === "recording" && (
-          <div className="text-center space-y-6 animate-fade-in">
-            <WaveformVisualizer isActive={true} />
-            <p className="text-2xl font-medium text-primary">{t.listening}</p>
-            <p className="text-muted-foreground">{t.stopRecording}</p>
+          <div className="text-center space-y-8 animate-fade-in">
+            {/* Animated Orb */}
+            <div className="relative w-48 h-48 mx-auto">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse-ring-active" />
+              <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green-lg flex items-center justify-center overflow-hidden">
+                <WaveformVisualizer isActive={true} barCount={24} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-title font-bold text-primary">{t.listening}</p>
+              <p className="text-subhead text-muted-foreground">{t.stopRecording}</p>
+            </div>
           </div>
         )}
 
         {/* Processing State */}
         {state === "processing" && (
-          <div className="text-center space-y-6 animate-fade-in">
-            <div className="w-24 h-24 mx-auto">
-              <div className="animate-sprout">
-                <svg
-                  width="96"
-                  height="96"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-primary"
-                >
-                  <path d="M12 22v-7" />
-                  <path d="M9 12h6" />
-                  <path d="M12 12V8" />
-                  <path d="M9 8c0-2 1.5-4 3-4s3 2 3 4" />
-                  <path d="M7 15c-1 1-2 3-2 5h14c0-2-1-4-2-5" />
-                </svg>
+          <div className="text-center space-y-8 animate-fade-in">
+            <div className="relative w-48 h-48 mx-auto">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-breathing" />
+              <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin-smooth" />
               </div>
             </div>
-            <p className="text-2xl font-medium text-primary">{t.thinking}</p>
-          </div>
-        )}
-
-        {/* Idle State */}
-        {state === "idle" && (
-          <div className="text-center space-y-6 animate-fade-in">
-            <p className="text-xl text-muted-foreground">{t.tapToSpeak}</p>
+            <p className="text-title font-bold text-primary">{t.thinking}</p>
           </div>
         )}
 
         {/* Response State */}
         {state === "response" && (
-          <div className="w-full max-w-sm space-y-6 animate-fade-in">
+          <div className="w-full max-w-md space-y-6 animate-fade-in">
             {/* Speaker Button */}
             <div className="flex justify-center">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
                 className={cn(
-                  "w-24 h-24 rounded-full flex items-center justify-center transition-all btn-shadow",
+                  "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95",
                   isPlaying
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-green"
+                    : "bg-green-wash text-primary border-2 border-primary/20 hover:bg-green-subtle"
                 )}
                 aria-label={isPlaying ? "Pause" : "Play response"}
               >
@@ -156,38 +154,46 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
               </button>
             </div>
 
+            {/* Status */}
+            <div className="flex justify-center">
+              <div className={cn(
+                "inline-flex items-center gap-2 px-4 py-2 rounded-full text-footnote font-semibold",
+                isPlaying ? "bg-green-wash text-primary" : "bg-muted text-muted-foreground"
+              )}>
+                {isPlaying && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                  </span>
+                )}
+                <span>{isPlaying ? "Speaking..." : "Tap to play"}</span>
+              </div>
+            </div>
+
             {/* Transcript Toggle */}
             <button
               onClick={() => setShowTranscript(!showTranscript)}
-              className="w-full flex items-center justify-center gap-2 py-3 text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3 text-subhead text-muted-foreground hover:text-foreground transition-colors active:scale-[0.98]"
             >
-              {showTranscript ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              {showTranscript ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               <span>{showTranscript ? t.hideText : t.showText}</span>
             </button>
 
             {/* Transcript */}
             {showTranscript && (
-              <div className="bg-muted rounded-xl p-4 animate-fade-in">
-                <p className="text-foreground leading-relaxed">{demoResponse}</p>
+              <div className="p-5 bg-green-wash rounded-apple-lg border-l-4 border-primary animate-fade-in">
+                <p className="text-body text-foreground leading-relaxed">{demoResponse}</p>
               </div>
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 h-14 gap-2"
-                onClick={() => {}}
-              >
-                <Share2 size={20} />
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
+                <Share2 size={18} />
                 {t.share}
               </Button>
-              <Button
-                variant="outline"
-                className="flex-1 h-14 gap-2"
-                onClick={() => {}}
-              >
-                <BookmarkPlus size={20} />
+              <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
+                <BookmarkPlus size={18} />
                 {t.save}
               </Button>
             </div>
@@ -196,7 +202,7 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
       </div>
 
       {/* Bottom Microphone */}
-      <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
+      <div className="pb-10 pt-4 flex flex-col items-center gap-3 bg-gradient-to-t from-background via-background to-transparent">
         <MicrophoneButton
           isRecording={state === "recording"}
           isProcessing={state === "processing"}
@@ -204,7 +210,7 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
           size={state === "response" ? "default" : "large"}
         />
         {state === "response" && (
-          <p className="text-muted-foreground">{t.askAnother}</p>
+          <p className="text-subhead text-muted-foreground">{t.askAnother}</p>
         )}
       </div>
     </div>
