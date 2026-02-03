@@ -9,22 +9,25 @@ export function ConnectionStatus({ isOnline }: ConnectionStatusProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
+        "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-footnote font-semibold transition-all duration-200",
         isOnline
-          ? "bg-success/10 text-success"
-          : "bg-offline/10 text-offline"
+          ? "bg-green-wash text-primary"
+          : "bg-muted text-muted-foreground"
       )}
       role="status"
       aria-live="polite"
     >
       {isOnline ? (
         <>
-          <Wifi size={18} />
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+          </span>
           <span>Online</span>
         </>
       ) : (
         <>
-          <WifiOff size={18} />
+          <WifiOff size={14} />
           <span>Offline</span>
         </>
       )}

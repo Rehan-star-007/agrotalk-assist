@@ -4,8 +4,11 @@
  * Converts vision labels from image classification into
  * structured agricultural advice using rule-based pattern matching.
  */
-
-import { VisionLabel } from "./visionAnalysis";
+// VisionLabel type for agricultural inference
+export interface VisionLabel {
+  label: string;
+  score: number;
+}
 
 export interface AgriculturalAdvisory {
     condition: string;
