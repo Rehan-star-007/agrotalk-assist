@@ -1,9 +1,13 @@
 @echo off
-TITLE AgroVoice Backend
+TITLE AgroVoice Full Stack Application
 echo ===================================================
-echo   Starting AgroVoice Python Backend (YOLOv8)
+echo   Starting AgroVoice Application (Frontend + Backend)
 echo ===================================================
 
+echo [INFO] Starting Frontend (Vite)...
+start cmd /k "npm run dev"
+
+echo [INFO] Starting Backend (FastAPI)...
 cd backend_py
 
 :: Check if venv exists
@@ -30,6 +34,6 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 if errorlevel 1 (
     echo.
-    echo [ERROR] Server failed to start.
+    echo [ERROR] Backend server failed to start.
     pause
 )

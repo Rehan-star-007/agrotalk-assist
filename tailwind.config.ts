@@ -126,8 +126,8 @@ export default {
         "apple-sm": "0 2px 8px rgba(0,0,0,0.04), 0 0 1px rgba(0,0,0,0.04)",
         "apple": "0 4px 20px rgba(0,0,0,0.06), 0 0 1px rgba(0,0,0,0.04)",
         "apple-lg": "0 8px 32px rgba(0,0,0,0.08)",
-        "green": "0 8px 24px rgba(16, 185, 129, 0.35)",
-        "green-lg": "0 12px 32px rgba(16, 185, 129, 0.5)",
+        "green": "0 8px 24px rgba(118, 185, 0, 0.35)",
+        "green-lg": "0 12px 32px rgba(118, 185, 0, 0.5)",
         "nav": "0 -2px 10px rgba(0,0,0,0.06)",
       },
       backdropBlur: {

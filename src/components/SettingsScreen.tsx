@@ -90,7 +90,7 @@ export function SettingsScreen({
   const t = translations[language as keyof typeof translations] || translations.en;
 
   return (
-    <div className="min-h-screen bg-muted pb-28 animate-fade-in">
+    <div className="flex flex-col flex-1 bg-muted pb-28 animate-fade-in">
       {/* Header */}
       <div className="px-5 pt-6 pb-4 bg-background border-b border-border">
         <h1 className="text-title-lg font-bold text-foreground">{t.settings}</h1>
@@ -189,7 +189,7 @@ export function SettingsScreen({
                   <p className="text-caption text-muted-foreground">{t.offlineDesc}</p>
                 </div>
               </div>
-              <ToggleSwitch enabled={false} onToggle={() => {}} />
+              <ToggleSwitch enabled={false} onToggle={() => { }} />
             </div>
 
             {/* Auto-Save */}
@@ -203,7 +203,7 @@ export function SettingsScreen({
                   <p className="text-caption text-muted-foreground">{t.autoSaveDesc}</p>
                 </div>
               </div>
-              <ToggleSwitch enabled={true} onToggle={() => {}} />
+              <ToggleSwitch enabled={true} onToggle={() => { }} />
             </div>
 
             {/* Storage */}

@@ -10,37 +10,7 @@ import { ImageAnalysis } from "@/components/ImageAnalysis";
 import { LibraryScreen } from "@/components/LibraryScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
-
-// Demo data for recent queries
-const demoQueries = [
-  {
-    id: "1",
-    query: "Why are my wheat leaves turning yellow?",
-    queryHi: "मेरे गेहूं की पत्तियां पीली क्यों हो रही हैं?",
-    response: "Yellow leaves may indicate nitrogen deficiency. Apply nitrogen-rich fertilizer and ensure proper irrigation.",
-    responseHi: "पीली पत्तियां नाइट्रोजन की कमी का संकेत हो सकती हैं। नाइट्रोजन युक्त खाद डालें।",
-    timestamp: new Date(Date.now() - 1800000),
-    cropType: "wheat" as const,
-  },
-  {
-    id: "2",
-    query: "Best time to water rice crops?",
-    queryHi: "धान की फसल को पानी देने का सबसे अच्छा समय?",
-    response: "Water rice early morning or evening to minimize evaporation. Maintain 5cm standing water during tillering.",
-    responseHi: "सुबह जल्दी या शाम को पानी दें। कल्ले फूटने के दौरान 5cm पानी बनाए रखें।",
-    timestamp: new Date(Date.now() - 7200000),
-    cropType: "rice" as const,
-  },
-  {
-    id: "3",
-    query: "How to prepare soil for next season?",
-    queryHi: "अगले मौसम के लिए मिट्टी कैसे तैयार करें?",
-    response: "Add organic compost, test pH levels, and let the field rest for 2 weeks before planting.",
-    responseHi: "जैविक खाद डालें, pH स्तर जांचें, और बुवाई से पहले 2 सप्ताह खेत को आराम दें।",
-    timestamp: new Date(Date.now() - 86400000),
-    cropType: "general" as const,
-  },
-];
+import { useLibrary } from "@/hooks/useLibrary";
 
 const translations = {
   en: {
@@ -99,76 +69,88 @@ export default function Index() {
     setPlayingId(playingId === id ? null : id);
   };
 
+  const { items: libraryItems } = useLibrary();
+
   // Home Screen Content
-  const renderHomeScreen = () => (
-    <div className="min-h-screen pb-28 bg-background">
-      {/* Header */}
-      <header className="px-5 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-8">
-          <ConnectionStatus isOnline={isOnline} />
-          <LanguageSelector
-            selectedLanguage={language}
-            onLanguageChange={setLanguage}
-          />
-        </div>
-        
-        {/* Hero Section */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-wash mb-4">
-            <Leaf className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="text-title-lg font-bold text-foreground">{t.greeting}</h1>
-          <p className="text-body text-muted-foreground mt-2">{t.greetingSubtext}</p>
-        </div>
-      </header>
+  const renderHomeScreen = () => {
+    const recentScans = libraryItems.slice(0, 3);
 
-      {/* Main Microphone Button */}
-      <div className="flex flex-col items-center justify-center py-6">
-        <MicrophoneButton
-          isRecording={false}
-          isProcessing={false}
-          onClick={() => setIsVoiceOpen(true)}
-          size="large"
-        />
-        <p className="text-muted-foreground mt-6 text-subhead font-medium">{t.tapToSpeak}</p>
-        
-        {/* Camera Button */}
-        <button
-          onClick={() => setIsImageOpen(true)}
-          className="mt-6 inline-flex items-center gap-3 px-6 py-3 rounded-full bg-card border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
-          aria-label={t.scanCrop}
-        >
-          <Camera size={22} className="text-primary" />
-          <span className="font-semibold text-foreground">{t.scanCrop}</span>
-        </button>
-      </div>
-
-      {/* Recent Queries */}
-      <section className="px-5 mt-8">
-        <h2 className="text-headline font-bold text-foreground mb-4">{t.recentQueries}</h2>
-        <div className="space-y-3">
-          {demoQueries.map((query) => (
-            <RecentQueryCard
-              key={query.id}
-              id={query.id}
-              query={language === "hi" ? query.queryHi : query.query}
-              response={language === "hi" ? query.responseHi : query.response}
-              timestamp={query.timestamp}
-              cropType={query.cropType}
-              onPlay={handlePlayQuery}
-              isPlaying={playingId === query.id}
+    return (
+      <div className="flex flex-col flex-1 pb-28 bg-background">
+        {/* Header content unchanged... */}
+        <header className="px-5 pt-6 pb-4">
+          <div className="flex items-center justify-between mb-8">
+            <ConnectionStatus isOnline={isOnline} />
+            <LanguageSelector
+              selectedLanguage={language}
+              onLanguageChange={setLanguage}
             />
-          ))}
+          </div>
+
+          {/* Hero Section */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-wash mb-4">
+              <Leaf className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-title-lg font-bold text-foreground">{t.greeting}</h1>
+            <p className="text-body text-muted-foreground mt-2">{t.greetingSubtext}</p>
+          </div>
+        </header>
+
+        {/* Main Microphone Button */}
+        <div className="flex flex-col items-center justify-center py-6">
+          <MicrophoneButton
+            isRecording={false}
+            isProcessing={false}
+            onClick={() => setIsVoiceOpen(true)}
+            size="large"
+          />
+          <p className="text-muted-foreground mt-6 text-subhead font-medium">{t.tapToSpeak}</p>
+
+          {/* Camera Button */}
+          <button
+            onClick={() => setIsImageOpen(true)}
+            className="mt-6 inline-flex items-center gap-3 px-6 py-3 rounded-full bg-card border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
+            aria-label={t.scanCrop}
+          >
+            <Camera size={22} className="text-primary" />
+            <span className="font-semibold text-foreground">{t.scanCrop}</span>
+          </button>
         </div>
-      </section>
-    </div>
-  );
+
+        {/* Recent Queries */}
+        <section className="px-5 mt-8">
+          <h2 className="text-headline font-bold text-foreground mb-4">{t.recentQueries}</h2>
+          <div className="space-y-3">
+            {recentScans.length > 0 ? (
+              recentScans.map((item) => (
+                <RecentQueryCard
+                  key={item.id}
+                  id={item.id}
+                  query={language === "hi" ? item.diseaseNameHi : item.diseaseName}
+                  response={language === "hi" ? item.summaryHi : item.summary}
+                  timestamp={new Date(item.timestamp)}
+                  cropType={item.cropType.toLowerCase() as any}
+                  onPlay={handlePlayQuery}
+                  isPlaying={playingId === item.id}
+                />
+              ))
+            ) : (
+              <div className="p-8 text-center bg-muted/50 rounded-apple border border-dashed border-border">
+                <p className="text-subhead text-muted-foreground">No recent scans yet</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
       {/* Offline Banner */}
       {!isOnline && <OfflineBanner language={language} />}
-      
+
       {/* Main Content */}
       <main className={!isOnline ? "pt-14" : ""}>
         {activeTab === "home" && renderHomeScreen()}

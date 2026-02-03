@@ -17,13 +17,13 @@ class PlantDiseaseDetector:
         # Standard Fruits/Veg
         946: "Pepper", 948: "Apple", 949: "Strawberry", 950: "Orange", 
         951: "Lemon", 952: "Fig", 953: "Pineapple", 954: "Banana", 
-        955: "Jackfruit", 956: "Custard Apple", 957: "Pomegranate", 
         987: "Corn", 989: "Rose Hip",
         
         # Common Potato/Root Misclassifications
         927: "Potato",  # Mushroom (Agaric) often looks like a potato
         992: "Potato",  # Agaric
         997: "Potato",  # Boletus
+        955: "Potato",  # Jackfruit (can look like bumpy potato)
         959: "Potato",  # French loaf (looks like tuber)
         960: "Potato",  # Meat loaf
         963: "Potato",  # Flowerpot (often confused with earthy vegetables)
@@ -31,8 +31,8 @@ class PlantDiseaseDetector:
         965: "Potato",  # Mortar
         
         # Other Crops
-        941: "Squash", 942: "Squash", 943: "Squash", 944: "Cucumber", 945: "Zucchini",
-        947: "Cardoon", 985: "Daisy", 988: "Acorn", 
+        941: "Squash", 942: "Squash", 943: "Squash", 945: "Zucchini",
+        947: "Cardoon", 985: "Daisy",
         
         # Fungi (treated as potential fungal markers)
         991: "Fungus", 994: "Fungus", 995: "Fungus", 996: "Fungus"
@@ -74,16 +74,23 @@ class PlantDiseaseDetector:
             green_ratio = np.sum(is_green) / img[...,0].size
             
             # 2. Check for Brown/Dark Spots (Malice)
-            # Low intensity and reddish-brown hue
-            is_brown = (r > g) & (r > b) & (r < 180) & (g < 150)
+            # Low intensity and reddish-brown hue - Expanded range for better detection
+            is_brown = (r > g) & (r > b) & (r < 200) & (g < 180) & (r > 40)
             brown_ratio = np.sum(is_brown) / img[...,0].size
             
-            # Calculate health: if lots of green, it's healthy. If lots of brown/dark, it's diseased.
-            if green_ratio > 0.15:
-                return 1.0 - min(1.0, green_ratio * 3.0)
+            # Health Score Logic (0.0 = Healthy, 1.0 = Diseased)
+            # CRITICAL FIX: If significant brown spots exist, it IS diseased, regardless of greenness.
+            
+            if brown_ratio > 0.02: # If > 2% of the leaf has apparent lesions
+                 # High confidence of disease
+                 return min(1.0, 0.4 + (brown_ratio * 10.0))
+            
+            if green_ratio > 0.25:
+                # Mostly green and very few brown spots -> Healthy
+                return max(0.0, 0.2 - green_ratio)
             else:
-                # If not green, use brown ratio as a marker for fruit/tuber disease
-                return min(1.0, brown_ratio * 5.0 + 0.2)
+                # Not green, not clearly brown -> Ambiguous / potentially unhealthy
+                return 0.5
         except: return 0.5
 
     def detect(self, image: Image.Image) -> dict:
@@ -107,11 +114,15 @@ class PlantDiseaseDetector:
                     break
             
             # Keyword secondary check
-            if category == "Plant":
-                top_label = self.names[top1_idx].lower()
-                if any(k in top_label for k in ["potato", "mushroom", "pot", "loaf"]): category = "Potato"
+            top_label = self.names[top1_idx].lower()
+            
+            # If top label is generic or misleading fruit, check for specific agricultural signals
+            if category == "Plant": 
+                if any(k in top_label for k in ["potato", "mushroom", "pot", "loaf", "tuber", "agaric"]): category = "Potato"
                 elif any(k in top_label for k in ["apple", "fruit"]): category = "Apple"
                 elif any(k in top_label for k in ["tomato", "berry"]): category = "Tomato"
+                elif any(k in top_label for k in ["corn", "ear"]): category = "Corn"
+                elif any(k in top_label for k in ["leaf", "slug", "beetle", "spider", "cucumber", "acorn", "daisy"]): category = "Plant" # Force generic path for leaves or misclassified ornaments
 
             # --- STAGE 2: PATHOLOGY ANALYSIS ---
             health_score = self._get_health_score(image)

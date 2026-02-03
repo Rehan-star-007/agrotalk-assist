@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets } from "lucide-react";
+import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { useLibrary, LibraryItem } from "@/hooks/useLibrary";
+import { toast } from "sonner";
 
 interface LibraryScreenProps {
   language: string;
@@ -66,66 +68,73 @@ const translations = {
   },
 };
 
-// Demo data
-const demoAnalyses = [
-  {
-    id: "1",
-    diseaseName: "Wheat Leaf Rust",
-    diseaseNameHi: "गेहूं पत्ती जंग",
-    cropType: "Wheat",
-    cropTypeHi: "गेहूं",
-    confidence: 92,
-    severity: "high" as const,
-    timestamp: new Date(Date.now() - 86400000 * 2),
-    thumbnail: "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400&h=300&fit=crop",
-    summary: "Orange-brown pustules detected on leaves, immediate treatment recommended",
-    summaryHi: "पत्तियों पर नारंगी-भूरे रंग के दाने पाए गए, तुरंत उपचार की सिफारिश",
-  },
-  {
-    id: "2",
-    diseaseName: "Healthy Tomato Plant",
-    diseaseNameHi: "स्वस्थ टमाटर का पौधा",
-    cropType: "Tomato",
-    cropTypeHi: "टमाटर",
-    confidence: 98,
-    severity: "low" as const,
-    timestamp: new Date(Date.now() - 86400000 * 5),
-    thumbnail: "https://images.unsplash.com/photo-1592841200221-a6898f307baa?w=400&h=300&fit=crop",
-    summary: "No signs of disease or pest damage detected",
-    summaryHi: "कोई रोग या कीट क्षति के संकेत नहीं मिले",
-  },
-  {
-    id: "3",
-    diseaseName: "Rice Blast",
-    diseaseNameHi: "धान का झुलसा रोग",
-    cropType: "Rice",
-    cropTypeHi: "धान",
-    confidence: 87,
-    severity: "medium" as const,
-    timestamp: new Date(Date.now() - 86400000 * 7),
-    thumbnail: "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=400&h=300&fit=crop",
-    summary: "Lesions with gray centers detected on leaves",
-    summaryHi: "पत्तियों पर भूरे केंद्र वाले धब्बे पाए गए",
-  },
-];
-
 type FilterType = "all" | "healthy" | "diseased" | "thisWeek";
 
 export function LibraryScreen({ language }: LibraryScreenProps) {
+  const { items, deleteItem, updateItem } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
   const t = translations[language as keyof typeof translations] || translations.en;
   const isHindi = language === "hi";
 
-  const formatTime = (date: Date) => {
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / 86400000);
-    
+
     if (days === 0) return t.today;
     if (days === 1) return t.yesterday;
     return `${days} ${t.days} ${t.ago}`;
+  };
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch =
+      item.diseaseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.cropType.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.diseaseNameHi.includes(searchQuery) ||
+      item.cropTypeHi.includes(searchQuery);
+
+    if (!matchesSearch) return false;
+
+    if (activeFilter === "healthy") return item.severity === "low";
+    if (activeFilter === "diseased") return item.severity !== "low";
+    if (activeFilter === "thisWeek") {
+      const diff = Date.now() - new Date(item.timestamp).getTime();
+      return diff < 86400000 * 7;
+    }
+    return true;
+  });
+
+  const stats = {
+    total: items.length,
+    diseases: items.filter(i => i.severity !== "low").length,
+    healthy: items.filter(i => i.severity === "low").length,
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm(isHindi ? "क्या आप वाकई इसे हटाना चाहते हैं?" : "Are you sure you want to delete this?")) {
+      deleteItem(id);
+      toast.success(isHindi ? "हटाया गया" : "Analysis deleted");
+    }
+  };
+
+  const startEdit = (item: LibraryItem) => {
+    setEditingId(item.id);
+    setEditValue(isHindi ? item.diseaseNameHi : item.diseaseName);
+  };
+
+  const saveEdit = (id: string) => {
+    if (isHindi) {
+      updateItem(id, { diseaseNameHi: editValue });
+    } else {
+      updateItem(id, { diseaseName: editValue });
+    }
+    setEditingId(null);
+    toast.success(isHindi ? "अपडेट किया गया" : "Updated successfully");
   };
 
   const filters: { id: FilterType; label: string }[] = [
@@ -135,10 +144,11 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
     { id: "thisWeek", label: t.filters.thisWeek },
   ];
 
-  const showEmpty = demoAnalyses.length === 0;
+  const showEmpty = items.length === 0;
+
 
   return (
-    <div className="min-h-screen bg-muted pb-28 animate-fade-in">
+    <div className="flex flex-col flex-1 bg-muted pb-28 animate-fade-in">
       {/* Header */}
       <div className="px-5 pt-6 pb-4 bg-background border-b border-border">
         <div className="flex items-center gap-2 mb-1">
@@ -146,7 +156,7 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
           <h1 className="text-title-lg font-bold text-foreground">{t.title}</h1>
         </div>
         <p className="text-subhead text-muted-foreground">
-          {demoAnalyses.length} {t.subtitle}
+          {items.length} {t.subtitle}
         </p>
       </div>
 
@@ -185,7 +195,7 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
             )}
           />
           {searchQuery && (
-            <button 
+            <button
               onClick={() => setSearchQuery("")}
               className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground hover:text-foreground"
             >
@@ -218,17 +228,17 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <Leaf className="w-5 h-5 text-primary mx-auto mb-1" />
             <p className="text-caption text-muted-foreground">{t.stats.total}</p>
-            <p className="text-headline font-bold text-foreground">{demoAnalyses.length}</p>
+            <p className="text-headline font-bold text-foreground">{stats.total}</p>
           </div>
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <AlertCircle className="w-5 h-5 text-destructive mx-auto mb-1" />
             <p className="text-caption text-muted-foreground">{t.stats.diseases}</p>
-            <p className="text-headline font-bold text-foreground">2</p>
+            <p className="text-headline font-bold text-foreground">{stats.diseases}</p>
           </div>
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <CheckCircle className="w-5 h-5 text-primary mx-auto mb-1" />
             <p className="text-caption text-muted-foreground">{t.stats.healthy}</p>
-            <p className="text-headline font-bold text-foreground">1</p>
+            <p className="text-headline font-bold text-foreground">{stats.healthy}</p>
           </div>
         </div>
 
@@ -247,80 +257,106 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
           </div>
         ) : (
           /* Analysis Cards Grid */
-          <div className="space-y-3 pt-2">
-            {demoAnalyses.map((analysis) => (
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 gap-y-8 pt-4">
+            {filteredItems.map((analysis) => (
               <div
                 key={analysis.id}
-                className="bg-card rounded-apple-lg border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
+                className="group relative h-full"
               >
-                {/* Thumbnail */}
-                <div className="relative aspect-[16/9]">
-                  <img 
-                    src={analysis.thumbnail} 
-                    alt={isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
-                    className="w-full h-full object-cover"
-                  />
-                  {/* Status Badge */}
-                  <div className={cn(
-                    "absolute top-3 right-3 px-3 py-1.5 rounded-full text-caption font-bold flex items-center gap-1.5",
-                    "glass",
-                    analysis.severity === "high" ? "text-destructive" : "text-primary"
-                  )}>
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      analysis.severity === "high" ? "bg-destructive" : "bg-primary"
-                    )} />
-                    {analysis.severity === "high" ? (isHindi ? "समस्या" : "Issue") : (isHindi ? "स्वस्थ" : "Healthy")}
-                  </div>
-                  {/* Date Badge */}
-                  <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full text-caption font-medium flex items-center gap-1.5 glass text-muted-foreground">
-                    <Clock size={12} />
-                    {formatTime(analysis.timestamp)}
-                  </div>
-                  {/* Play Button */}
-                  <button className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-primary/90 text-primary-foreground flex items-center justify-center shadow-green hover:bg-primary transition-colors active:scale-95">
-                    <Play size={18} className="ml-0.5" />
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-4">
-                  <h3 className="text-headline font-bold text-foreground line-clamp-1">
-                    {isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
-                  </h3>
-                  
-                  {/* Confidence */}
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-subhead font-semibold text-primary">{analysis.confidence}% Confident</span>
-                    <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary rounded-full" 
-                        style={{ width: `${analysis.confidence}%` }}
-                      />
+                <div className="flex flex-col h-full bg-card rounded-3xl border border-border shadow-apple-sm overflow-hidden hover:shadow-apple transition-all duration-300">
+                  {/* Thumbnail with 4:3 aspect ratio */}
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <img
+                      src={analysis.thumbnail}
+                      alt={isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                    {/* Status Badge */}
+                    <div className={cn(
+                      "absolute top-3 right-3 px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5",
+                      "glass",
+                      analysis.severity === "high" ? "text-destructive" : "text-primary"
+                    )}>
+                      {analysis.severity === "high" ? (isHindi ? "समस्या" : "Issue") : (isHindi ? "स्वस्थ" : "Healthy")}
                     </div>
                   </div>
 
-                  <div className="h-px bg-border my-3" />
+                  {/* Content */}
+                  <div className="p-4 flex flex-col flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          analysis.severity === "high" ? "bg-destructive animate-pulse" : "bg-primary"
+                        )} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                          {isHindi ? analysis.cropTypeHi : analysis.cropType} • {formatTime(analysis.timestamp)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => startEdit(analysis)}
+                          className="p-1 hover:text-primary transition-colors text-muted-foreground/40"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(analysis.id)}
+                          className="p-1 hover:text-destructive transition-colors text-muted-foreground/40"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
 
-                  <p className="text-subhead text-muted-foreground line-clamp-2">
-                    {isHindi ? analysis.summaryHi : analysis.summary}
-                  </p>
+                    {editingId === analysis.id ? (
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          className="flex-1 px-3 py-1 border rounded text-headline bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                          autoFocus
+                          onKeyDown={(e) => e.key === 'Enter' && saveEdit(analysis.id)}
+                          onBlur={() => setEditingId(null)}
+                        />
+                      </div>
+                    ) : (
+                      <h3 className="text-headline font-bold text-foreground line-clamp-1">
+                        {isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
+                      </h3>
+                    )}
 
-                  {/* Footer */}
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="px-3 py-1 bg-green-wash text-primary rounded-full text-caption font-semibold">
-                      {isHindi ? analysis.cropTypeHi : analysis.cropType}
-                    </span>
-                    <button className="flex items-center gap-1 text-subhead font-semibold text-primary hover:underline">
-                      {t.viewDetails}
-                      <ChevronRight size={16} />
-                    </button>
+                    {/* Confidence */}
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-subhead font-semibold text-primary">{analysis.confidence}% Confident</span>
+                      <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all duration-1000"
+                          style={{ width: `${analysis.confidence}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="h-px bg-border my-3" />
+
+                    <p className="text-subhead text-muted-foreground line-clamp-2">
+                      {isHindi ? analysis.summaryHi : analysis.summary}
+                    </p>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between mt-3">
+                      <button className="flex items-center gap-1 text-subhead font-semibold text-primary hover:underline">
+                        {t.viewDetails}
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+
       </div>
     </div>
   );

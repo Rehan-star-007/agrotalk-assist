@@ -3,6 +3,8 @@ import { X, Camera, Upload, Volume2, CheckCircle, AlertCircle, Loader2, Sparkles
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
+import { useLibrary } from "@/hooks/useLibrary";
+import { toast } from "sonner";
 
 type AnalysisState = "camera" | "uploading" | "analyzing" | "result";
 
@@ -79,6 +81,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<DiseaseAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isSaved, setIsSaved] = useState(false);
+  const { addItem } = useLibrary();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const t = translations[language as keyof typeof translations] || translations.en;
@@ -122,6 +126,32 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
       }
       setState("result");
 
+      // Auto-save to library
+      const newItem = {
+        diseaseName: visionResult.analysis.disease_name,
+        diseaseNameHi: visionResult.analysis.disease_name_hindi,
+        cropType: visionResult.analysis.crop_identified || "Unknown",
+        cropTypeHi: visionResult.analysis.crop_identified || "अज्ञात",
+        confidence: visionResult.analysis.confidence,
+        severity: visionResult.analysis.severity,
+        thumbnail: visionResult.processed_image || previewImage || "",
+        summary: visionResult.analysis.description,
+        summaryHi: visionResult.analysis.description_hindi,
+        description: visionResult.analysis.description,
+        descriptionHi: visionResult.analysis.description_hindi,
+        symptoms: visionResult.analysis.symptoms,
+        symptomsHi: visionResult.analysis.symptoms_hindi,
+        treatment: visionResult.analysis.treatment_steps,
+        treatmentHi: visionResult.analysis.treatment_steps_hindi,
+      };
+      const { item: savedItem, isDuplicate } = addItem(newItem);
+      setIsSaved(true);
+      if (isDuplicate) {
+        toast.info(isHindi ? "इतिहास में पहले से मौजूद, समय अपडेट किया गया" : "Already in history, time updated");
+      } else {
+        toast.success(isHindi ? "इतिहास में सहेजा गया" : "Saved to history");
+      }
+
     } catch (error) {
       setErrorMessage("Connection issue. Ensure backend is running.");
       setState("result");
@@ -133,6 +163,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
     setPreviewImage(null);
     setAnalysisResult(null);
     setErrorMessage("");
+    setIsSaved(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -153,8 +184,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
     <div className="fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
-        <button 
-          onClick={() => { resetAnalysis(); onClose(); }} 
+        <button
+          onClick={() => { resetAnalysis(); onClose(); }}
           className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95"
         >
           <X size={20} />
@@ -171,10 +202,10 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
       <div className="flex-1 overflow-y-auto">
         {/* Camera State */}
         {state === "camera" && (
-          <div className="flex flex-col items-center justify-center p-6 min-h-[70vh] animate-fade-in">
+          <div className="flex flex-col items-center justify-center p-6 flex-1 animate-fade-in">
             {/* Upload Area */}
             <div className="relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed border-primary bg-background flex flex-col items-center justify-center p-8 hover:bg-green-wash hover:border-primary/70 transition-all cursor-pointer"
-                 onClick={() => fileInputRef.current?.click()}>
+              onClick={() => fileInputRef.current?.click()}>
               <div className="w-16 h-16 rounded-full bg-green-wash flex items-center justify-center mb-4">
                 <Camera className="w-8 h-8 text-primary" />
               </div>
@@ -187,15 +218,15 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
             </div>
 
             <div className="w-full max-w-sm mt-8 space-y-3">
-              <Button 
-                onClick={() => fileInputRef.current?.click()} 
+              <Button
+                onClick={() => fileInputRef.current?.click()}
                 className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
               >
                 <Camera className="mr-2 h-5 w-5" /> {t.takePhoto}
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => fileInputRef.current?.click()} 
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
                 className="w-full h-14 text-body font-semibold rounded-apple border-2 border-border hover:bg-green-wash hover:border-primary/50 active:scale-[0.98] transition-all"
               >
                 <Upload className="mr-2 h-5 w-5 text-primary" /> {t.uploadPhoto}
@@ -207,7 +238,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
         {/* Loading State */}
         {(state === "uploading" || state === "analyzing") && (
-          <div className="flex flex-col items-center justify-center p-8 min-h-[70vh] animate-fade-in">
+          <div className="flex flex-col items-center justify-center p-8 flex-1 animate-fade-in">
             <div className="relative w-64 h-64 rounded-apple-lg overflow-hidden shadow-apple-lg">
               {previewImage && (
                 <img src={previewImage} alt="Scanning" className="w-full h-full object-cover" />
@@ -215,7 +246,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
               <div className="absolute inset-0 border-2 border-primary/50 rounded-apple-lg" />
               <div className="absolute top-0 left-0 w-full h-1 bg-primary shadow-[0_0_15px_rgba(16,185,129,0.8)] animate-scan-line" />
             </div>
-            
+
             <div className="mt-8 text-center space-y-3">
               <div className="inline-flex items-center gap-2">
                 <Loader2 className="w-5 h-5 text-primary animate-spin-smooth" />
@@ -224,14 +255,14 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 </p>
               </div>
               <p className="text-subhead text-muted-foreground">{t.analyzingNote}</p>
-              
+
               {/* Progress Bar */}
               <div className="w-64 h-1.5 bg-muted rounded-full overflow-hidden mt-4">
-                <div 
+                <div
                   className={cn(
                     "h-full bg-primary rounded-full transition-all duration-700",
                     state === "uploading" ? "w-1/3" : (analysisStep === "crop" ? "w-2/3" : "w-[95%]")
-                  )} 
+                  )}
                 />
               </div>
             </div>
@@ -240,7 +271,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
         {/* Result State */}
         {state === "result" && (
-          <div className="p-5 pb-32 animate-slide-up">
+          <div className="p-5 pb-10 animate-slide-up">
             {/* Image Preview */}
             {previewImage && (
               <div className="relative rounded-apple-lg overflow-hidden shadow-apple-lg bg-muted mb-6">
@@ -267,8 +298,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 {/* Status Banner */}
                 <div className={cn(
                   "p-4 rounded-apple-lg flex items-center gap-3",
-                  analysisResult.severity === 'high' 
-                    ? "bg-destructive/10 border border-destructive/20" 
+                  analysisResult.severity === 'high'
+                    ? "bg-destructive/10 border border-destructive/20"
                     : "bg-green-wash border border-primary/20"
                 )}>
                   {analysisResult.severity === 'high' ? (
@@ -297,8 +328,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                   </div>
                   <div className={cn(
                     "p-4 rounded-apple border text-center",
-                    analysisResult.severity === 'high' 
-                      ? "bg-destructive/5 border-destructive/20" 
+                    analysisResult.severity === 'high'
+                      ? "bg-destructive/5 border-destructive/20"
                       : "bg-green-wash border-primary/20"
                   )}>
                     <p className="text-caption font-bold text-muted-foreground uppercase tracking-wide mb-1">{t.severity}</p>
@@ -319,8 +350,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 </div>
 
                 {/* Listen Button */}
-                <Button 
-                  className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all" 
+                <Button
+                  className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
                   onClick={speakAdvice}
                 >
                   <Volume2 className="mr-2 h-5 w-5" /> {t.hearAdvice}
@@ -392,8 +423,16 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 active:scale-[0.98]">
-                    <BookmarkPlus className="mr-2 h-4 w-4" /> {t.save}
+                  <Button
+                    variant={isSaved ? "default" : "outline"}
+                    className={cn(
+                      "flex-1 h-12 rounded-apple border-2 transition-all",
+                      isSaved && "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                    )}
+                    disabled={isSaved}
+                  >
+                    {isSaved ? <CheckCircle className="mr-2 h-4 w-4" /> : <BookmarkPlus className="mr-2 h-4 w-4" />}
+                    {isSaved ? (isHindi ? "सहेजा गया" : "Saved") : t.save}
                   </Button>
                   <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 active:scale-[0.98]">
                     <Share2 className="mr-2 h-4 w-4" /> {t.share}
@@ -401,9 +440,9 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 </div>
 
                 {/* Scan Another */}
-                <Button 
-                  variant="ghost" 
-                  className="w-full h-12 rounded-apple text-muted-foreground hover:text-foreground active:scale-[0.98]" 
+                <Button
+                  variant="ghost"
+                  className="w-full h-12 rounded-apple text-muted-foreground hover:text-foreground active:scale-[0.98]"
                   onClick={resetAnalysis}
                 >
                   <RotateCcw className="mr-2 h-4 w-4" /> {t.scanAnother}

@@ -6,7 +6,7 @@ interface RecentQueryCardProps {
   query: string;
   response: string;
   timestamp: Date;
-  cropType?: "wheat" | "rice" | "general";
+  cropType?: "wheat" | "rice" | "potato" | "tomato" | "apple" | "leaf" | "general";
   onPlay: (id: string) => void;
   isPlaying?: boolean;
 }
@@ -14,6 +14,10 @@ interface RecentQueryCardProps {
 const cropEmojis = {
   wheat: "🌾",
   rice: "🌿",
+  potato: "🥔",
+  tomato: "🍅",
+  apple: "🍎",
+  leaf: "🍃",
   general: "🌱",
 };
 
@@ -39,7 +43,7 @@ export function RecentQueryCard({
   };
 
   return (
-    <div 
+    <div
       className={cn(
         "group bg-card rounded-apple border border-border p-4",
         "shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5",
