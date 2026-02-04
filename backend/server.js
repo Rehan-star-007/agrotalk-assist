@@ -5,7 +5,8 @@
  * Solves CORS issues by making server-to-server API calls.
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const analyzeRoute = require('./routes/analyze');
@@ -63,5 +64,11 @@ app.listen(PORT, () => {
 
     if (!process.env.HF_TOKEN && !process.env.HF_API_KEY) {
         console.warn('⚠️  Warning: HF_TOKEN (or HF_API_KEY) not set in .env file');
+    }
+
+    if (process.env.OPENROUTER_API_KEY) {
+        console.log('✅ OpenRouter AI Enabled');
+    } else {
+        console.warn('⚠️ OPENROUTER_API_KEY not found in env');
     }
 });

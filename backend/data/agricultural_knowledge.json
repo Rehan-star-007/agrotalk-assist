@@ -300,9 +300,41 @@
                 "en": "Bollworms are a major threat. Use pheromone traps and biopesticides for effective management.",
                 "hi": "बॉलवॉर्म एक बड़ा खतरा हैं। प्रभावी प्रबंधन के लिए फेरोमोन जाल और जैव कीटनाशकों का उपयोग करें।"
             }
+        },
+        "dragonfruit": {
+            "names": [
+                "dragon fruit",
+                "pitaya",
+                "hylocereus",
+                "dragonfruit"
+            ],
+            "watering": {
+                "en": "As a cactus, dragon fruit needs less water. Water only when the top 1-2 inches of soil is dry. Avoid waterlogging at all costs.",
+                "hi": "कैक्टस के रूप में, ड्रैगन फ्रूट को कम पानी की आवश्यकता होती है। मिट्टी की ऊपरी 1-2 इंच सूखने पर ही पानी दें। हर कीमत पर जलभराव से बचें।"
+            },
+            "care": {
+                "en": "Dragon fruit is a climbing plant and needs a strong trellis or support. Prune regularly to encourage branching and fruit production.",
+                "hi": "ड्रैगन फ्रूट एक चढ़ने वाला पौधा है और इसे एक मजबूत मचान या सहारे की आवश्यकता होती है। शाखाओं और फल उत्पादन को प्रोत्साहित करने के लिए नियमित रूप से छंटाई करें।"
+            }
         }
     },
     "general": {
+        "watering": {
+            "en": "General watering advice: Most crops prefer watering in the early morning to reduce evaporation. Check soil moisture daily by sticking your finger 1-2 inches deep; if dry, it is time to water. Avoid overhead watering to prevent leaf diseases.",
+            "hi": "सामान्य सिंचाई सलाह: अधिकांश फसलें वाष्पीकरण कम करने के लिए सुबह जल्दी पानी देना पसंद करती हैं। मिट्टी की नमी की प्रतिदिन जांच करें; यदि सूखी हो, तो पानी देने का समय है।"
+        },
+        "pests": {
+            "en": "General pest control: Regularly inspect under leaves for eggs or small insects. Use organic neem oil spray (5ml per liter) weekly as a preventive measure. Remove heavily infested parts immediately.",
+            "hi": "सामान्य कीट नियंत्रण: पत्तियों के नीचे अंडों या छोटे कीटों की नियमित जांच करें। निवारक उपाय के रूप में साप्ताहिक रूप से जैविक नीम तेल स्प्रे (5 मिली प्रति लीटर) का उपयोग करें।"
+        },
+        "soil": {
+            "en": "General soil care: Well-draining soil is essential for most plants. Add organic compost or manure twice a year to maintain fertility. Avoid walking on wet soil to prevent compaction.",
+            "hi": "सामान्य मिट्टी की देखभाल: अधिकांश पौधों के लिए अच्छी जल निकासी वाली मिट्टी आवश्यक है। उर्वरता बनाए रखने के लिए साल में दो बार जैविक खाद डालें।"
+        },
+        "fertilizer": {
+            "en": "Fertilizer tips: Use balanced NPK (Nitrogen, Phosphorus, Potassium) for general growth. Apply at the base, not on leaves, and water immediately after feeding to help roots absorb nutrients.",
+            "hi": "उर्वरक सुझाव: सामान्य विकास के लिए संतुलित एनपीके का उपयोग करें। जड़ के पास डालें, पत्तियों पर नहीं, और पौधों को पोषक तत्व सोखने में मदद करने के लिए तुरंत पानी दें।"
+        },
         "crop rotation": {
             "en": "Crop rotation involves growing different types of crops in the same area across sequences of seasons. It helps maintain soil fertility and breaks pest cycles.",
             "hi": "फसल चक्र में विभिन्न प्रकार की फसलों को एक ही क्षेत्र में क्रमिक मौसमों में उगाया जाता है। यह मिट्टी की उर्वरता बनाए रखने और कीट चक्रों को तोड़ने में मदद करता है।"
@@ -332,7 +364,15 @@
             "pani",
             "sinchai",
             "hydrat",
-            "moist"
+            "moist",
+            "நிறுத்து",
+            "தண்ணீர்",
+            "நீர்பாசனம்",
+            "தண்ணீர் ஊற்று",
+            "நீరు",
+            "నీరు",
+            "నీరు పెట్టడం",
+            "సాగునీరు"
         ],
         "soil": [
             "soil",
@@ -341,7 +381,12 @@
             "earth",
             "mitti",
             "land",
-            "field"
+            "field",
+            "மண்",
+            "தரை",
+            "நிலம்",
+            "నేల",
+            "మట్టి"
         ],
         "fertilizer": [
             "fertilizer",
@@ -352,7 +397,12 @@
             "nutr",
             "nitrogen",
             "urea",
-            "potash"
+            "potash",
+            "உரம்",
+            "இயற்கை உரம்",
+            "கம்போஸ்ட்",
+            "ఎరువు",
+            "కంపోస్ట్"
         ],
         "pests": [
             "pest",
@@ -365,7 +415,12 @@
             "larva",
             "aphid",
             "termite",
-            "bollworm"
+            "bollworm",
+            "பூச்சி",
+            "வண்டு",
+            "புழு",
+            "తెగులు",
+            "పురుగు"
         ],
         "diseases": [
             "disease",
@@ -377,7 +432,12 @@
             "rog",
             "rot",
             "blight",
-            "spot"
+            "spot",
+            "நோய்",
+            "தொற்று",
+            "காளான்",
+            "వ్యాధి",
+            "రోగం"
         ],
         "sunlight": [
             "sun",
@@ -386,7 +446,12 @@
             "shade",
             "dhoop",
             "sunshine",
-            "exposure"
+            "exposure",
+            "வெயில்",
+            "சூரிய ஒளி",
+            "நிழல்",
+            "ఎండ",
+            "సూర్యరశ్మి"
         ],
         "care": [
             "care",
@@ -400,7 +465,12 @@
             "harvest",
             "prun",
             "support",
-            "hilling"
+            "hilling",
+            "பராமரிப்பு",
+            "வளர்ப்பு",
+            "எப்படி",
+            "రక్షణ",
+            "పెంపకం"
         ],
         "harvesting": [
             "harvest",

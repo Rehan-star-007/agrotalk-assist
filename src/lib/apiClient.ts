@@ -152,6 +152,62 @@ export async function transcribeAndGetAdvice(
 }
 
 /**
+ * Get agricultural advice from text (bypassing speech-to-text)
+ * Useful for offline speech recognition or direct text chat.
+ */
+export async function getTextAdvice(
+    text: string,
+    language: string,
+    weatherContext?: { temp: number; condition: number; humidity: number }
+): Promise<TranscribeResponse> {
+    console.log('📤 Sending text to backend for inference...');
+
+    try {
+        const formData = new FormData();
+        formData.append('text', text);
+        formData.append('language', language);
+        if (weatherContext) {
+            formData.append('weatherData', JSON.stringify(weatherContext));
+        }
+
+        const response = await fetch(`${BACKEND_URL}/transcribe`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            // Handle error, maybe local logic fell back to general?
+            return {
+                success: false,
+                error: result.error || `Server error: ${response.status}`,
+            };
+        }
+
+        // Return transcript (the text itself) and advice
+        return {
+            success: true,
+            transcript: result.transcript,
+            advisory: result.advisory as AgriculturalAdvisory,
+        };
+
+    } catch (error) {
+        console.error('❌ Text inference failed:', error);
+        if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
+            return {
+                success: false,
+                error: 'Cannot connect to server (Offline?).'
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        };
+    }
+}
+
+/**
  * Check if backend is available
  */
 export async function checkBackendHealth(): Promise<boolean> {

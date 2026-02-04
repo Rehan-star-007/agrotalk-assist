@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Camera, Leaf } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { LanguageSelector } from "@/components/LanguageSelector";
@@ -15,14 +16,13 @@ import { WeatherDashboard } from "@/components/WeatherDashboard";
 
 import { getTranslation } from "@/lib/translations";
 
-type NavTab = "home" | "analyze" | "library" | "settings";
+type NavTab = "home" | "analyze" | "library" | "settings" | "assistant";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
   const [language, setLanguage] = useState("en");
   const [voiceSpeed, setVoiceSpeed] = useState<"slow" | "normal" | "fast">("normal");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isImageOpen, setIsImageOpen] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [weatherData, setWeatherData] = useState<any>(null);
@@ -136,7 +136,7 @@ export default function Index() {
           <MicrophoneButton
             isRecording={false}
             isProcessing={false}
-            onClick={() => setIsVoiceOpen(true)}
+            onClick={() => setActiveTab("assistant")}
             size="large"
           />
           <p className="text-muted-foreground mt-6 text-subhead font-medium">{t.tapToSpeak}</p>
@@ -186,8 +186,26 @@ export default function Index() {
       {!isOnline && <OfflineBanner language={language} />}
 
       {/* Main Content */}
-      <main className={!isOnline ? "pt-14" : ""}>
+      <main className={cn(
+        "flex-1 flex flex-col",
+        !isOnline ? "pt-14" : ""
+      )}>
         {activeTab === "home" && renderHomeScreen()}
+        {activeTab === "assistant" && (
+          <div className="animate-fade-in flex-1">
+            <VoiceInteraction
+              isOpen={true}
+              onClose={() => setActiveTab("home")}
+              language={language}
+              isIntegrated={true}
+              weatherContext={weatherData ? {
+                temp: weatherData.current.temperature_2m,
+                condition: weatherData.current.weather_code,
+                humidity: weatherData.current.relative_humidity_2m
+              } : undefined}
+            />
+          </div>
+        )}
         {activeTab === "library" && <LibraryScreen language={language} />}
         {activeTab === "settings" && (
           <SettingsScreen
@@ -202,16 +220,6 @@ export default function Index() {
       {/* Bottom Navigation */}
       <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-      <VoiceInteraction
-        isOpen={isVoiceOpen}
-        onClose={() => setIsVoiceOpen(false)}
-        language={language}
-        weatherContext={weatherData ? {
-          temp: weatherData.current.temperature_2m,
-          condition: weatherData.current.weather_code,
-          humidity: weatherData.current.relative_humidity_2m
-        } : undefined}
-      />
 
       {/* Image Analysis Modal */}
       <ImageAnalysis

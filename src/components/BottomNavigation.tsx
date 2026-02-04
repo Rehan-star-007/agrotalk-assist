@@ -1,7 +1,7 @@
-import { Home, Camera, BookOpen, Settings } from "lucide-react";
+import { Home, Camera, BookOpen, Settings, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type NavTab = "home" | "analyze" | "library" | "settings";
+type NavTab = "home" | "analyze" | "library" | "settings" | "assistant";
 
 interface BottomNavigationProps {
   activeTab: NavTab;
@@ -12,23 +12,24 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
   const tabs: { id: NavTab; icon: typeof Home; label: string }[] = [
     { id: "home", icon: Home, label: "Home" },
     { id: "analyze", icon: Camera, label: "Analyze" },
+    { id: "assistant", icon: User, label: "Assistant" },
     { id: "library", icon: BookOpen, label: "Library" },
     { id: "settings", icon: Settings, label: "Settings" },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-apple border-t border-border shadow-nav">
-      <div 
+      <div
         className="flex justify-around items-center max-w-lg mx-auto"
-        style={{ 
+        style={{
           height: "72px",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)" 
+          paddingBottom: "env(safe-area-inset-bottom, 0px)"
         }}
       >
         {tabs.map(({ id, icon: Icon, label }) => {
           const isActive = activeTab === id;
           const isAnalyze = id === "analyze";
-          
+
           return (
             <button
               key={id}
@@ -46,7 +47,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
               {isActive && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-1 rounded-full bg-primary animate-scale-in" />
               )}
-              
+
               {/* Icon container - special treatment for Analyze */}
               <div
                 className={cn(
@@ -55,8 +56,8 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                   isAnalyze && isActive && "bg-primary/10 rounded-full p-2"
                 )}
               >
-                <Icon 
-                  size={isAnalyze ? 26 : 24} 
+                <Icon
+                  size={isAnalyze ? 26 : 24}
                   strokeWidth={isActive ? 2.5 : 2}
                   className={cn(
                     "transition-all duration-200",
@@ -64,7 +65,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                   )}
                 />
               </div>
-              
+
               <span className={cn(
                 "text-caption font-semibold tracking-wide",
                 isActive && "font-bold"

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { getAgriAdvice } = require('./openRouterService');
 
 // Load Knowledge Base
 let knowledgeBase = { crops: {}, topics: {} };
@@ -127,7 +128,7 @@ function inferAdvice(labels) {
 /**
  * Advanced Dynamic Inference from Text
  */
-function inferAdviceFromText(text, language = 'en', weatherContext = null) {
+async function inferAdviceFromText(text, language = 'en', weatherContext = null) {
     const normalized = (text || '').trim();
     const normalizedLower = normalized.toLowerCase();
 
@@ -139,35 +140,61 @@ function inferAdviceFromText(text, language = 'en', weatherContext = null) {
         };
     }
 
-    const lang = language === 'hi' ? 'hi' : 'en';
+    const lang = ['hi', 'ta', 'te', 'mr'].includes(language) ? language : 'en';
 
     // 0. Weather-specific Knowledge Integration
-    const weatherKeywords = ['weather', 'temperature', 'hot', 'cold', 'rain', 'humidity', 'forecast', 'climate', 'मौसम', 'तापमान', 'बारिश', 'तापमान', 'गर्मी', 'ठंड'];
-    if (weatherContext && weatherKeywords.some(kw => normalizedLower.includes(kw))) {
+    const weatherKeywords = ['weather', 'temperature', 'hot', 'cold', 'rain', 'humidity', 'forecast', 'climate', 'मौसम', 'तापमान', 'बारिश', 'तापमान', 'गर्मी', 'ठंड', 'வானிலை', 'வெப்பநிலை', 'மழை'];
+    const wateringKeywords = ['water', 'watering', 'irrigation', 'sinchai', 'pani', 'நீர்ப்பாசனம்', 'தண்ணீர்'];
+
+    const isWeatherQuery = weatherKeywords.some(kw => normalizedLower.includes(kw));
+    const isWateringQuery = wateringKeywords.some(kw => normalizedLower.includes(kw));
+
+    if (weatherContext && (isWeatherQuery || isWateringQuery)) {
         // Simple mapping for weather codes (Open-Meteo)
         const weatherLabels = {
-            0: { en: 'Clear sky', hi: 'आसमान साफ है' },
-            1: { en: 'Mainly clear', hi: 'मुख्य रूप से साफ' },
-            2: { en: 'Partly cloudy', hi: 'आंशिक रूप से बादल' },
-            3: { en: 'Overcast', hi: 'बादल छाए हुए हैं' },
-            61: { en: 'Slight rain', hi: 'हल्की बारिश' },
-            80: { en: 'Rain showers', hi: 'बारिश की बौछारें' }
+            0: { en: 'Clear sky', hi: 'आसमान साफ है', ta: 'தெளிவான வானம்' },
+            1: { en: 'Mainly clear', hi: 'मुख्य रूप से साफ', ta: 'பெரும்பாலும் தெளிவு' },
+            2: { en: 'Partly cloudy', hi: 'आंशिक रूप से बादल', ta: 'ஓரளவு மேகமூட்டம்' },
+            3: { en: 'Overcast', hi: 'बादल छाए हुए हैं', ta: 'மேகமூட்டம்' },
+            61: { en: 'Slight rain', hi: 'हल्की बारिश', ta: 'லேசான மழை' },
+            80: { en: 'Rain showers', hi: 'बारिश की बौछारें', ta: 'மழை' }
         };
-        const condition = weatherLabels[weatherContext.condition]?.[lang] || (lang === 'hi' ? 'मौसम अपडेट' : 'Weather Update');
-        const recommendation = lang === 'hi'
-            ? `वर्तमान तापमान ${Math.round(weatherContext.temp)}°C है और ${condition} है। आर्द्रता ${weatherContext.humidity}% है। यह आपकी कृषि योजना के लिए महत्वपूर्ण है।`
-            : `The current temperature is ${Math.round(weatherContext.temp)}°C with ${condition}. Humidity is at ${weatherContext.humidity}%. This is useful data for your farming activities.`;
+
+        const langNames = { en: 'Weather Advisory', hi: 'मौसम की सलाह', ta: 'வானிலை ஆலோசனை' };
+        const weatherDesc = weatherLabels[weatherContext.condition]?.[lang] || weatherLabels[weatherContext.condition]?.['en'] || 'Current Weather';
+
+        let recommendation = '';
+        if (lang === 'ta') {
+            recommendation = `தற்போதைய வெப்பநிலை ${Math.round(weatherContext.temp)}°C மற்றும் ${weatherDesc}. ஈரப்பதம் ${weatherContext.humidity}% ஆகும். `;
+            if (isWateringQuery) {
+                recommendation += weatherContext.temp > 30
+                    ? "வெப்பம் அதிகமாக இருப்பதால், இன்று கூடுதல் நீர்ப்பாசனம் தேவைப்படலாம்."
+                    : "மண்ணின் ஈரப்பதத்தை சரிபார்த்து தேவைப்பட்டால் மட்டும் தண்ணீர் ஊற்றவும்.";
+            }
+        } else if (lang === 'hi') {
+            recommendation = `वर्तमान तापमान ${Math.round(weatherContext.temp)}°C है और ${weatherDesc} है। आर्द्रता ${weatherContext.humidity}% है। `;
+            if (isWateringQuery) {
+                recommendation += weatherContext.temp > 30
+                    ? "गर्मी के कारण आज अतिरिक्त सिंचाई की आवश्यकता हो सकती है।"
+                    : "सिंचाई से पहले मिट्टी की नमी की जांच कर लें।";
+            }
+        } else {
+            recommendation = `The temperature is ${Math.round(weatherContext.temp)}°C with ${weatherDesc}. `;
+            if (isWateringQuery) {
+                recommendation += weatherContext.temp > 30
+                    ? "It's quite hot, so your plants might need extra water today."
+                    : "Check soil moisture before watering; the current conditions are moderate.";
+            }
+        }
 
         return {
-            condition: lang === 'hi' ? 'मौसम की जानकारी' : 'Current Weather Knowledge',
+            condition: `Local Wisdom: ${langNames[lang] || langNames['en']}`,
             confidence: 'High',
             recommendation: recommendation
         };
     }
-
-    // 1. Check for General Agricultural Questions (e.g., "What is composting?")
+    // 1. Check for General Agricultural Questions
     if (knowledgeBase.general) {
-        // Sort concepts by length to match more specific (longer) phrases first
         const sortedConcepts = Object.keys(knowledgeBase.general).sort((a, b) => b.length - a.length);
         for (const concept of sortedConcepts) {
             if (normalizedLower.includes(concept)) {
@@ -187,40 +214,61 @@ function inferAdviceFromText(text, language = 'en', weatherContext = null) {
         const cropData = knowledgeBase.crops[crop];
         let adviceText = cropData[topic] ? cropData[topic][lang] : null;
 
-        // If specific topic not found for that crop, look for 'care'
         if (!adviceText && topic !== 'care') {
             adviceText = cropData['care'] ? cropData['care'][lang] : null;
         }
 
         if (adviceText) {
             const cropTitle = crop.charAt(0).toUpperCase() + crop.slice(1);
-            const topicTitle = topic.charAt(0).toUpperCase() + topic.slice(1);
             return {
-                condition: `${cropTitle} - ${topicTitle}`,
+                condition: `Local Wisdom: ${cropTitle}`,
                 confidence: 'High',
                 recommendation: adviceText
             };
         }
     }
 
-    // 3. Pattern Match Fallback (for generic issues like "yellow leaves" without crop name)
+    // 3. Pattern Match Fallback
     for (const pattern of CONDITION_PATTERNS) {
         if (pattern.keywords.some(kw => normalizedLower.includes(kw))) {
             return {
-                condition: pattern.condition,
+                condition: `Local Wisdom: ${pattern.condition}`,
                 confidence: 'Medium',
                 recommendation: pattern.recommendation
             };
         }
     }
 
-    // 4. Final Fallback
+    // 4. AI Fallback (Premium Online Mode)
+    if (process.env.OPENROUTER_API_KEY) {
+        console.log(`🤔 No local match. Attempting AI Fallback in ${lang}...`);
+        try {
+            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang);
+            if (aiResponse) {
+                return {
+                    condition: 'AI Assistant',
+                    confidence: 'High',
+                    recommendation: aiResponse.text
+                };
+            }
+        } catch (e) {
+            console.error('❌ AI Fallback Error:', e);
+        }
+    }
+
+    // 5. Final Fallback
+    const finalFallbacks = {
+        en: "Sorry, I don't have specific info for that crop or topic yet. Try asking about watering, soil, or pests.",
+        hi: "क्षमा करें, मुझे उस फसल या विषय के बारे में विशिष्ट जानकारी नहीं है। कृपया मिट्टी, पानी या कीटों के बारे में पूछें।",
+        ta: "மன்னிக்கவும், அந்த பயிர் அல்லது தலைப்பு குறித்து என்னிடம் இன்னும் குறிப்பிட்ட தகவல் இல்லை. நீர்ப்பாசனம், மண் அல்லது பூச்சிகள் பற்றி கேட்டு முயற்சிக்கவும்.",
+        te: "క్షమించండి, ఆ పంట లేదా అంశం గురించి నాకు ఇంకా నిర్దిష్ట సమాచారం లేదు. నీరు, నేల లేదా తెగుళ్ల గురించి అడిగి చూడండి.",
+        mr: "क्षमस्व, माझ्याकडे अद्याप त्या पिकाबद्दल किंवा विषयाबद्दल विशिष्ट माहिती नाही. पाणी पिणे, माती किंवा कीड याबद्दल विचारण्याचा प्रयत्न करा."
+    };
+
     return {
         condition: 'General Advice',
         confidence: 'Low',
-        recommendation: lang === 'hi'
-            ? 'क्षमा करें, मुझे उस फसल या विषय के बारे में विशिष्ट जानकारी नहीं है। कृपया मिट्टी, पानी या कीटों के बारे में पूछें।'
-            : 'Sorry, I don\'t have specific info for that crop or topic yet. Try asking about watering, soil, or pests.'
+        recommendation: finalFallbacks[lang] || finalFallbacks['en']
     };
 }
 
