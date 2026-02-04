@@ -7,6 +7,9 @@ echo ===================================================
 echo [INFO] Starting Frontend (Vite)...
 start cmd /k "npm run dev"
 
+echo [INFO] Starting Node.js Backend...
+start cmd /k "npm run dev:backend"
+
 echo [INFO] Starting Backend (FastAPI)...
 cd backend_py
 

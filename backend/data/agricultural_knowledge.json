@@ -1,0 +1,431 @@
+{
+    "crops": {
+        "potato": {
+            "names": [
+                "potato",
+                "potatoes",
+                "aaloo",
+                "aloo",
+                "solanum tuberosum"
+            ],
+            "watering": {
+                "en": "Potatoes need consistent moisture. Water deeply once or twice a week (about 1-2 inches per week). Avoid overhead watering to prevent leaf diseases.",
+                "hi": "आलू को निरंतर नमी की आवश्यकता होती है। सप्ताह में एक या दो बार गहराई से पानी दें (लगभग 1-2 इंच प्रति सप्ताह)। पत्तियों के रोगों को रोकने के लिए ऊपर से पानी देने से बचें।"
+            },
+            "soil": {
+                "en": "Grows best in loose, well-draining, slightly acidic soil (pH 5.0 to 6.0). Enrich with organic compost.",
+                "hi": "ढीली, अच्छी जल निकासी वाली, थोड़ी अम्लीय मिट्टी (pH 5.0 से 6.0) में सबसे अच्छा बढ़ता है। जैविक खाद के साथ समृद्ध करें।"
+            },
+            "pests": {
+                "en": "Watch for Colorado Potato Beetle and Aphids. Use neem oil or introduce ladybugs for organic control.",
+                "hi": "कोलोराडो आलू बीटल और एफिड्स पर नज़र रखें। जैविक नियंत्रण के लिए नीम के तेल का उपयोग करें या लेडीबग्स पालें।"
+            },
+            "care": {
+                "en": "Hilling (mounding soil around the base) is essential for potatoes to protect tubers from sunlight and increase yield.",
+                "hi": "आलू के लिए मिट्टी चढ़ाना (आधार के चारों ओर मिट्टी का टीला बनाना) कंदों को धूप से बचाने और उपज बढ़ाने के लिए आवश्यक है।"
+            },
+            "harvesting": {
+                "en": "Harvest when the vines turn yellow and die back. Cure in a cool, dark place for 2 weeks for longer storage.",
+                "hi": "जब बेलें पीली हो जाएं और मर जाएं तब कटाई करें। लंबे समय तक भंडारण के लिए 2 सप्ताह तक ठंडी, अंधेरी जगह में रखें।"
+            }
+        },
+        "tomato": {
+            "names": [
+                "tomato",
+                "tomatoes",
+                "tamatar",
+                "solanum lycopersicum"
+            ],
+            "watering": {
+                "en": "Tomato plants need about 1-1.5 inches of water per week. Water at the base to keep foliage dry. Inconsistent watering causes blossom end rot.",
+                "hi": "टमाटर के पौधों को प्रति सप्ताह लगभग 1-1.5 इंच पानी की आवश्यकता होती है। पत्तियों को सूखा रखने के लिए आधार पर पानी दें। अनियमित सिंचाई से फल सड़ने लगते हैं।"
+            },
+            "sunlight": {
+                "en": "Requires at least 6-8 hours of direct sunshine daily for best fruit production.",
+                "hi": "सर्वोत्तम फल उत्पादन के लिए प्रतिदिन कम से कम 6-8 घंटे सीधी धूप की आवश्यकता होती है।"
+            },
+            "pests": {
+                "en": "Common pests include Tomato Hornworms and Fruit Borers. Handpick hornworms or use Bt (Bacillus thuringiensis) spray.",
+                "hi": "सामान्य कीटों में टमाटर के हॉर्नवॉर्म और फल छेदक शामिल हैं। हॉर्नवॉर्म को हाथ से चुनें या बीटी (बैसिलस थुरिंजिएंसिस) स्प्रे का उपयोग करें।"
+            },
+            "sowing": {
+                "en": "Start seeds indoors 6-8 weeks before the last frost. Transplant when soil is warm and seedlings are 6-10 inches tall.",
+                "hi": "पिछली पाले से 6-8 सप्ताह पहले घर के अंदर बीज बोना शुरू करें। जब मिट्टी गर्म हो जाए और पौधे 6-10 इंच लंबे हो जाएं तब रोपण करें।"
+            }
+        },
+        "cucumber": {
+            "names": [
+                "cucumber",
+                "cucumbers",
+                "kheera",
+                "kakdi",
+                "cucumis sativus"
+            ],
+            "watering": {
+                "en": "Cucumbers require frequent watering, especially when fruiting. Keep soil consistently moist but not waterlogged. About 1 inch per week is standard.",
+                "hi": "खीरे को बार-बार पानी देने की आवश्यकता होती है, खासकर फल आने के दौरान। मिट्टी को लगातार नम रखें लेकिन जलभराव न होने दें। प्रति सप्ताह लगभग 1 इंच मानक है।"
+            },
+            "care": {
+                "en": "Cucumber vines need support from a trellis or fence. Mulching helps retain moisture and keeps fruit off the soil.",
+                "hi": "खीरे की बेलों को मचान या बाड़ से सहारे की आवश्यकता होती है। मल्चिंग नमी बनाए रखने में मदद करती है और फलों को मिट्टी से दूर रखती है।"
+            },
+            "soil": {
+                "en": "Requires fertile, well-draining soil with a pH of 6.0 to 7.0. Rich in organic matter.",
+                "hi": "6.0 से 7.0 के पीएच के साथ उपजाऊ, अच्छी जल निकासी वाली मिट्टी की आवश्यकता होती है। जैविक पदार्थों से भरपूर।"
+            }
+        },
+        "rice": {
+            "names": [
+                "rice",
+                "paddy",
+                "chawal",
+                "dhan",
+                "oryza sativa"
+            ],
+            "watering": {
+                "en": "Paddy fields need to be submerged in 2-5 cm of water during early growth. Maintain standing water until the grain starts to ripen.",
+                "hi": "शुरुआती विकास के दौरान धान के खेतों को 2-5 सेमी पानी में डूबा रहना चाहिए। जब तक दाना पकना शुरू न हो जाए, तब तक पानी खड़ा रखें।"
+            },
+            "fertilizer": {
+                "en": "Apply Nitrogen in split doses. Use Zinc sulfate if leaves show brownish tints (Zinc deficiency).",
+                "hi": "नाइट्रोजन का प्रयोग विभाजित खुराकों में करें। यदि पत्तियों पर भूरापन दिखाई दे तो जिंक सल्फेट का प्रयोग करें (जिंक की कमी)।"
+            }
+        },
+        "wheat": {
+            "names": [
+                "wheat",
+                "gehu",
+                "gehun",
+                "triticum"
+            ],
+            "watering": {
+                "en": "Wheat needs critical irrigation at the Crown Root Initiation (CRI) stage, usually 20-25 days after sowing. Avoid overwatering in late stages.",
+                "hi": "गेहूं को क्राउन रूट इनिशिएशन (CRI) स्तर पर महत्वपूर्ण सिंचाई की आवश्यकता होती है, आमतौर पर बुवाई के 20-25 दिन बाद। बाद के चरणों में जलभराव से बचें।"
+            },
+            "pests": {
+                "en": "Watch for Wheat Aphids and Termites. Use recommended seed treatment before sowing to prevent early pest attacks.",
+                "hi": "गेहूं के एफिड्स और दीमक पर नज़र रखें। शुरुआती कीट हमलों को रोकने के लिए बुवाई से पहले अनुशंसित बीज उपचार का उपयोग करें।"
+            }
+        },
+        "chili": {
+            "names": [
+                "chili",
+                "chilli",
+                "mirch",
+                "mirchi",
+                "capsicum"
+            ],
+            "watering": {
+                "en": "Chili plants prefer well-drained soil. Water when the top inch of soil feels dry. Overwatering can lead to root rot.",
+                "hi": "मिर्च के पौधे अच्छी जल निकासी वाली मिट्टी पसंद करते हैं। जब मिट्टी की ऊपरी इंच सूखी लगे तब पानी दें। अधिक पानी से जड़ें सड़ सकती हैं।"
+            },
+            "care": {
+                "en": "Pinching the tips of young chili plants encourages bushier growth and more fruit production.",
+                "hi": "मिर्च के छोटे पौधों के सिरों को चुटकी से काटने से झाड़ीदार विकास और अधिक फल उत्पादन को बढ़ावा मिलता है।"
+            }
+        },
+        "onion": {
+            "names": [
+                "onion",
+                "onions",
+                "pyaj",
+                "pyaaz",
+                "allium cepa"
+            ],
+            "watering": {
+                "en": "Onions need regular watering, but the soil must be well-drained. Stop watering when the tops start to fall over and turn yellow.",
+                "hi": "प्याज को नियमित पानी की आवश्यकता होती है, लेकिन मिट्टी अच्छी जल निकासी वाली होनी चाहिए। जब ऊपरी हिस्से गिरने लगें और पीले होने लगें तो पानी देना बंद कर दें।"
+            },
+            "soil": {
+                "en": "Onions grow best in loose, sandy loam soil that is rich in organic matter and free of stones.",
+                "hi": "प्याज रेतीली दोमट मिट्टी में सबसे अच्छा उगता है जो जैविक पदार्थों से भरपूर हो और पत्थरों से मुक्त हो।"
+            }
+        },
+        "mango": {
+            "names": [
+                "mango",
+                "mangoes",
+                "aam",
+                "mangifera indica"
+            ],
+            "watering": {
+                "en": "Young mango trees need regular watering. Mature trees need less water, except during flowering and fruit development.",
+                "hi": "आम के छोटे पेड़ों को नियमित पानी की आवश्यकता होती है। परिपक्व पेड़ों को कम पानी की आवश्यकता होती है, सिवाय फूल आने और फल बनने के दौरान।"
+            },
+            "care": {
+                "en": "Prune mango trees to maintain shape and remove dead wood. Apply organic manure after the harvest season.",
+                "hi": "आम के पेड़ों का आकार बनाए रखने और सूखी लकड़ियों को हटाने के लिए छंटाई करें। कटाई के मौसम के बाद जैविक खाद डालें।"
+            }
+        },
+        "banana": {
+            "names": [
+                "banana",
+                "bananas",
+                "kela",
+                "musa"
+            ],
+            "watering": {
+                "en": "Bananas are thirsty plants. They need deep, regular watering to keep the large leaves lush and support fruit weight.",
+                "hi": "केला अधिक पानी चाहने वाला पौधा है। बड़ी पत्तियों को हरा-भरा रखने और फलों के वजन को संभालने के लिए इसे गहरी, नियमित सिंचाई की आवश्यकता होती है।"
+            },
+            "soil": {
+                "en": "Requires deep, fertile, well-draining soil with plenty of organic mulch to retain moisture.",
+                "hi": "नमी बनाए रखने के लिए भरपूर जैविक मल्च के साथ गहरी, उपजाऊ, अच्छी जल निकासी वाली मिट्टी की आवश्यकता होती है।"
+            }
+        },
+        "corn": {
+            "names": [
+                "corn",
+                "maize",
+                "makka",
+                "makki",
+                "bhutta",
+                "zea mays"
+            ],
+            "watering": {
+                "en": "Corn needs a lot of water, especially during silking and pollination. Inadequate water results in poor ear development.",
+                "hi": "मक्का को बहुत अधिक पानी की आवश्यकता होती है, विशेष रूप से सिल्किंग और परागण के दौरान। अपर्याप्त जल से भुट्टे का विकास खराब होता है।"
+            },
+            "sunlight": {
+                "en": "Corn is a heavy feeder of sunlight. It needs full sun for at least 8-10 hours a day.",
+                "hi": "मक्का को बहुत अधिक धूप की आवश्यकता होती है। इसे दिन में कम से कम 8-10 घंटे पूरी धूप चाहिए।"
+            }
+        },
+        "spinach": {
+            "names": [
+                "spinach",
+                "palak",
+                "spinacia oleracea"
+            ],
+            "watering": {
+                "en": "Spinach needs frequent, light watering to keep the soil moist. Dry soil can cause plants to bolt (go to seed) prematurely.",
+                "hi": "पालक को मिट्टी नम रखने के लिए बार-बार, हल्की सिंचाई की आवश्यकता होती है। सूखी मिट्टी से पौधे समय से पहले बीज देने (बोल्टिंग) लगते हैं।"
+            },
+            "care": {
+                "en": "Spinach grows best in cool weather. In hot seasons, provide shade or grow heat-resistant varieties.",
+                "hi": "पालक ठंडे मौसम में सबसे अच्छा बढ़ता है। गर्म मौसम में, छाया प्रदान करें या गर्मी प्रतिरोधी किस्में उगाएं।"
+            }
+        },
+        "ladyfinger": {
+            "names": [
+                "lady finger",
+                "okra",
+                "bhindi",
+                "abelmoschus esculentus"
+            ],
+            "watering": {
+                "en": "Okra is relatively drought-tolerant but yields better with regular watering. Keep soil moist throughout the summer.",
+                "hi": "भिंडी अपेक्षाकृत सूखा सहने वाली है लेकिन नियमित सिंचाई के साथ बेहतर पैदावार देती है। पूरी गर्मी मिट्टी को नम रखें।"
+            },
+            "harvesting": {
+                "en": "Harvest pods when they are 2-3 inches long and still tender. Oversized pods become woody and tough.",
+                "hi": "जब फलियां 2-3 इंच लंबी और नरम हों तब कटाई करें। अधिक बड़ी फलियां लकड़ी जैसी और सख्त हो जाती हैं।"
+            }
+        },
+        "eggplant": {
+            "names": [
+                "eggplant",
+                "brinjal",
+                "baigan",
+                "baingan",
+                "solanum melongena"
+            ],
+            "pests": {
+                "en": "Shoot and Fruit Borer is a major pest. Remove infected shoots immediately and use sticky traps for insects.",
+                "hi": "तना और फल छेदक एक प्रमुख कीट है। संक्रमित तनों को तुरंत हटा दें और कीटों के लिए चिपचिपे जाल का उपयोग करें।"
+            },
+            "care": {
+                "en": "Support plants with stakes or cages to keep the heavy fruits off the ground and prevent stem breakage.",
+                "hi": "भारी फलों को जमीन से ऊपर रखने और तना टूटने से बचाने के लिए पौधों को डंडों या पिंजरों से सहारा दें।"
+            }
+        },
+        "ginger": {
+            "names": [
+                "ginger",
+                "adrak",
+                "zingiber officinale"
+            ],
+            "soil": {
+                "en": "Ginger needs rich, loose, loamy soil with plenty of organic matter. It grows best in partial shade.",
+                "hi": "अदरक को जैविक पदार्थों से भरपूर समृद्ध, ढीली, दोमट मिट्टी की आवश्यकता होती है। यह आंशिक छाया में सबसे अच्छा बढ़ता है।"
+            },
+            "watering": {
+                "en": "Keep soil moist but never soggy. Reduce watering as the foliage starts to die back before harvest.",
+                "hi": "मिट्टी को नम रखें लेकिन कभी गीली नहीं। कटाई से पहले जब पत्तियां सूखने लगें तो पानी देना कम कर दें।"
+            }
+        },
+        "garlic": {
+            "names": [
+                "garlic",
+                "lehsun",
+                "lahsun",
+                "allium sativum"
+            ],
+            "sowing": {
+                "en": "Plant garlic cloves in autumn for a summer harvest. Point the pointed end up and plant 2 inches deep.",
+                "hi": "गर्मियों में फसल के लिए शरद ऋतु में लहसुन की कलियां लगाएं। नुकीले सिरे को ऊपर रखें और 2 इंच गहरा लगाएं।"
+            }
+        },
+        "carrot": {
+            "names": [
+                "carrot",
+                "gajar",
+                "daucus carota"
+            ],
+            "soil": {
+                "en": "Carrots need deep, loose, stone-free soil to allow roots to grow straight. Sandy soil is ideal.",
+                "hi": "गाजर को जड़ों को सीधे बढ़ने के लिए गहरी, ढीली, पत्थर रहित मिट्टी की आवश्यकता होती है। रेतीली मिट्टी आदर्श है।"
+            }
+        },
+        "sugarcane": {
+            "names": [
+                "sugarcane",
+                "ganna",
+                "ookh",
+                "saccharum officinarum"
+            ],
+            "watering": {
+                "en": "Sugarcane is a high water-consuming crop. Frequent irrigation is needed, especially during the growth phase.",
+                "hi": "गन्ना अधिक पानी की खपत वाली फसल है। बार-बार सिंचाई की आवश्यकता होती है, विशेष रूप से विकास के चरण के दौरान।"
+            }
+        },
+        "cotton": {
+            "names": [
+                "cotton",
+                "kapas",
+                "rui",
+                "gossypium"
+            ],
+            "pests": {
+                "en": "Bollworms are a major threat. Use pheromone traps and biopesticides for effective management.",
+                "hi": "बॉलवॉर्म एक बड़ा खतरा हैं। प्रभावी प्रबंधन के लिए फेरोमोन जाल और जैव कीटनाशकों का उपयोग करें।"
+            }
+        }
+    },
+    "general": {
+        "crop rotation": {
+            "en": "Crop rotation involves growing different types of crops in the same area across sequences of seasons. It helps maintain soil fertility and breaks pest cycles.",
+            "hi": "फसल चक्र में विभिन्न प्रकार की फसलों को एक ही क्षेत्र में क्रमिक मौसमों में उगाया जाता है। यह मिट्टी की उर्वरता बनाए रखने और कीट चक्रों को तोड़ने में मदद करता है।"
+        },
+        "compost": {
+            "en": "Composting is the natural process of recycling organic matter, like leaves and food scraps, into a valuable fertilizer that enriches soil and plants.",
+            "hi": "कम्पोस्टि्ंग जैविक पदार्थों, जैसे पत्तियों और भोजन के अवशेषों को एक मूल्यवान उर्वरक में बदलने की प्राकृतिक प्रक्रिया है जो मिट्टी और पौधों को समृद्ध करती है।"
+        },
+        "mulching": {
+            "en": "Mulching involves covering the soil surface with organic materials like straw or leaves to retain moisture, suppress weeds, and cool the soil.",
+            "hi": "मल्चिंग में नमी बनाए रखने, खरपतवारों को दबाने और मिट्टी को ठंडा करने के लिए मिट्टी की सतह को पुआल या पत्तियों जैसे जैविक पदार्थों से ढका जाता है।"
+        },
+        "organic pesticide": {
+            "en": "A simple organic pesticide can be made by mixing 5ml of neem oil with 1 liter of water and a few drops of liquid soap. Spray on plants weekly.",
+            "hi": "एक सरल जैविक कीटनाशक 1 लीटर पानी में 5 मिली नीम के तेल और तरल साबुन की कुछ बूंदों को मिलाकर बनाया जा सकता है। साप्ताहिक रूप से पौधों पर स्प्रे करें।"
+        }
+    },
+    "topics": {
+        "watering": [
+            "water",
+            "watering",
+            "irrigation",
+            "pour",
+            "drink",
+            "wet",
+            "drip",
+            "pani",
+            "sinchai",
+            "hydrat",
+            "moist"
+        ],
+        "soil": [
+            "soil",
+            "dirt",
+            "ground",
+            "earth",
+            "mitti",
+            "land",
+            "field"
+        ],
+        "fertilizer": [
+            "fertilizer",
+            "manure",
+            "compost",
+            "dung",
+            "khad",
+            "nutr",
+            "nitrogen",
+            "urea",
+            "potash"
+        ],
+        "pests": [
+            "pest",
+            "insect",
+            "bug",
+            "worm",
+            "beetle",
+            "kida",
+            "keet",
+            "larva",
+            "aphid",
+            "termite",
+            "bollworm"
+        ],
+        "diseases": [
+            "disease",
+            "sick",
+            "infection",
+            "fungus",
+            "mold",
+            "bimar",
+            "rog",
+            "rot",
+            "blight",
+            "spot"
+        ],
+        "sunlight": [
+            "sun",
+            "sunlight",
+            "light",
+            "shade",
+            "dhoop",
+            "sunshine",
+            "exposure"
+        ],
+        "care": [
+            "care",
+            "grow",
+            "maintenance",
+            "help",
+            "how to",
+            "dekhbhal",
+            "planting",
+            "sowing",
+            "harvest",
+            "prun",
+            "support",
+            "hilling"
+        ],
+        "harvesting": [
+            "harvest",
+            "picking",
+            "ripe",
+            "mature",
+            "collect",
+            "katai",
+            "todaai"
+        ],
+        "sowing": [
+            "sowing",
+            "planting",
+            "seed",
+            "transplant",
+            "sow",
+            "buwai",
+            "ropan"
+        ],
+        "organic": [
+            "organic",
+            "natural",
+            "home made",
+            "bio",
+            "jaivik"
+        ]
+    }
+}

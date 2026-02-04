@@ -25,6 +25,13 @@ export interface AnalysisResponse {
     error?: string;
 }
 
+export interface TranscribeResponse {
+    success: boolean;
+    transcript?: string;
+    advisory?: AgriculturalAdvisory;
+    error?: string;
+}
+
 /**
  * Analyze a crop image via the backend proxy
  * 
@@ -66,16 +73,80 @@ export async function analyzeImage(imageFile: File): Promise<AnalysisResponse> {
         console.error('❌ Failed to connect to backend:', error);
 
         // Check if it's a network error (backend not running)
-        if (error instanceof TypeError && error.message.includes('fetch')) {
+        if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
             return {
                 success: false,
-                error: 'Cannot connect to analysis server. Please ensure the backend is running.'
+                error: 'Cannot connect to analysis server (port 3001). Please ensure the backend is running by executing run_app.bat.'
             };
         }
 
         return {
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred'
+        };
+    }
+}
+
+/**
+ * Transcribe audio and get agricultural advice from spoken query.
+ *
+ * @param audioBlob - Recorded audio blob (e.g. audio/webm)
+ * @param language - UI language hint (e.g. 'en', 'hi')
+ * @returns Transcript and advisory, or error
+ */
+export async function transcribeAndGetAdvice(
+    audioBlob: Blob,
+    language: string,
+    weatherContext?: { temp: number; condition: number; humidity: number }
+): Promise<TranscribeResponse> {
+    console.log('📤 Sending audio to backend for transcription...');
+    console.log(`   Blob: ${audioBlob.type}, ${audioBlob.size} bytes`);
+
+    try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('language', language);
+        if (weatherContext) {
+            formData.append('weatherData', JSON.stringify(weatherContext));
+        }
+
+        const response = await fetch(`${BACKEND_URL}/transcribe`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            return {
+                success: false,
+                error: result.error || `Server error: ${response.status}`,
+            };
+        }
+
+        if (!result.transcript || !result.advisory) {
+            return {
+                success: false,
+                error: 'Invalid response from server.',
+            };
+        }
+
+        return {
+            success: true,
+            transcript: result.transcript,
+            advisory: result.advisory as AgriculturalAdvisory,
+        };
+    } catch (error) {
+        console.error('❌ Transcribe request failed:', error);
+        if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
+            return {
+                success: false,
+                error: 'Cannot connect to transcription server (port 3001). Please ensure the backend is running by executing run_app.bat.',
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
         };
     }
 }

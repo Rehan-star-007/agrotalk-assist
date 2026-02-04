@@ -1,17 +1,17 @@
-import fetch from "node-fetch";
-
+// Use global fetch (Node 18+)
 const HF_URL =
-    "https://api-inference.huggingface.co/models/google/vit-base-patch16-224";
+    "https://router.huggingface.co/hf-inference/models/google/vit-base-patch16-224";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function analyzeWithVision(imageBuffer) {
-    if (!process.env.HF_TOKEN) {
-        throw new Error("HF_TOKEN is missing in environment variables");
+async function analyzeImage(imageBuffer) {
+    const token = process.env.HF_TOKEN || process.env.HF_API_KEY;
+    if (!token) {
+        throw new Error("HF_TOKEN or HF_API_KEY is missing in environment variables");
     }
 
     const headers = {
-        Authorization: `Bearer ${process.env.HF_TOKEN}`,
+        Authorization: `Bearer ${token}`,
     };
 
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -25,6 +25,7 @@ export async function analyzeWithVision(imageBuffer) {
             });
 
             const raw = await res.text();
+            console.log(`Vision API status: ${res.status}`);
 
             if (res.status === 503 || raw.toLowerCase().includes("loading")) {
                 console.log("HF cold start/loading, waiting...");
@@ -33,14 +34,21 @@ export async function analyzeWithVision(imageBuffer) {
             }
 
             if (!res.ok) {
-                throw new Error(`HF HTTP ${res.status}: ${raw}`);
+                console.error("Vision API Error Response:", raw.slice(0, 200));
+                throw new Error(`HF HTTP ${res.status}: ${raw.slice(0, 100)}`);
             }
 
-            const data = JSON.parse(raw);
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseError) {
+                console.error("Failed to parse Vision response:", raw.slice(0, 200));
+                throw new Error("Invalid JSON response from Vision API");
+            }
 
             if (Array.isArray(data)) {
                 console.log("HF success");
-                return { source: "hf", labels: data };
+                return { success: true, labels: data };
             }
 
             throw new Error("Unexpected HF response: " + raw);
@@ -53,6 +61,7 @@ export async function analyzeWithVision(imageBuffer) {
     console.log("Using fallback vision logic");
 
     return {
+        success: true,
         source: "fallback",
         labels: [
             { label: "leaf", score: 0.9 },
@@ -60,3 +69,5 @@ export async function analyzeWithVision(imageBuffer) {
         ],
     };
 }
+
+module.exports = { analyzeImage };

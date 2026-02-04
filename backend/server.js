@@ -9,18 +9,21 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const analyzeRoute = require('./routes/analyze');
+const transcribeRoute = require('./routes/transcribe');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS for frontend
+// Enable CORS for frontend (Vite may use 8080, 8081, 8082, etc. when ports are in use)
 app.use(cors({
     origin: [
         'http://localhost:8080',
         'http://localhost:8081',
+        'http://localhost:8082',
         'http://localhost:5173',
         'http://127.0.0.1:8080',
-        'http://127.0.0.1:8081'
+        'http://127.0.0.1:8081',
+        'http://127.0.0.1:8082'
     ],
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
@@ -37,6 +40,13 @@ app.get('/health', (req, res) => {
 // Image analysis endpoint
 app.use('/analyze-image', analyzeRoute);
 
+// Weather forecast endpoint
+const weatherRoute = require('./routes/weather');
+app.use('/weather', weatherRoute);
+
+// Voice transcription + advisory endpoint
+app.use('/transcribe', transcribeRoute);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Server error:', err);
@@ -51,7 +61,7 @@ app.listen(PORT, () => {
     console.log(`🌱 AgroTalk Backend running on http://localhost:${PORT}`);
     console.log(`📡 Ready to analyze crop images`);
 
-    if (!process.env.HF_API_KEY) {
-        console.warn('⚠️  Warning: HF_API_KEY not set in .env file');
+    if (!process.env.HF_TOKEN && !process.env.HF_API_KEY) {
+        console.warn('⚠️  Warning: HF_TOKEN (or HF_API_KEY) not set in .env file');
     }
 });

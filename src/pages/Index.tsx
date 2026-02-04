@@ -11,6 +11,7 @@ import { LibraryScreen } from "@/components/LibraryScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useLibrary } from "@/hooks/useLibrary";
+import { WeatherDashboard } from "@/components/WeatherDashboard";
 
 const translations = {
   en: {
@@ -39,8 +40,48 @@ export default function Index() {
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isImageOpen, setIsImageOpen] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [weatherData, setWeatherData] = useState<any>(null);
+  const [isWeatherLoading, setIsWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
 
   const t = translations[language as keyof typeof translations] || translations.en;
+
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  const fetchWeather = async (lat: number, lon: number) => {
+    try {
+      setIsWeatherLoading(true);
+      const response = await fetch(`${API_BASE_URL}/weather?lat=${lat}&lon=${lon}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setWeatherData(result.data);
+      } else {
+        setWeatherError(result.error || 'Failed to fetch weather');
+      }
+    } catch (err) {
+      setWeatherError('Connection to weather service failed');
+    } finally {
+      setIsWeatherLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          fetchWeather(position.coords.latitude, position.coords.longitude);
+        },
+        () => {
+          // Fallback to a default location (e.g., New Delhi)
+          fetchWeather(28.6139, 77.2090);
+        }
+      );
+    } else {
+      setWeatherError('Geolocation not supported');
+      setIsWeatherLoading(false);
+    }
+  }, []);
 
   // Monitor online status
   useEffect(() => {
@@ -95,6 +136,13 @@ export default function Index() {
             <h1 className="text-title-lg font-bold text-foreground">{t.greeting}</h1>
             <p className="text-body text-muted-foreground mt-2">{t.greetingSubtext}</p>
           </div>
+
+          {/* Weather Dashboard */}
+          <WeatherDashboard
+            data={weatherData}
+            loading={isWeatherLoading}
+            error={weatherError}
+          />
         </header>
 
         {/* Main Microphone Button */}
@@ -168,11 +216,15 @@ export default function Index() {
       {/* Bottom Navigation */}
       <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* Voice Interaction Modal */}
       <VoiceInteraction
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
         language={language}
+        weatherContext={weatherData ? {
+          temp: weatherData.current.temperature_2m,
+          condition: weatherData.current.weather_code,
+          humidity: weatherData.current.relative_humidity_2m
+        } : undefined}
       />
 
       {/* Image Analysis Modal */}

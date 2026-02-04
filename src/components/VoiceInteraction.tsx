@@ -1,16 +1,33 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import { Button } from "./ui/button";
+import { transcribeAndGetAdvice } from "@/lib/apiClient";
+import type { AgriculturalAdvisory } from "@/lib/apiClient";
 
 type VoiceState = "idle" | "recording" | "processing" | "response";
+
+const MIN_AUDIO_BYTES = 1000;
+const RECORDER_TIMESLICE_MS = 250;
+
+function getSupportedMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus";
+  if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
+  return undefined;
+}
 
 interface VoiceInteractionProps {
   isOpen: boolean;
   onClose: () => void;
   language: string;
+  weatherContext?: {
+    temp: number;
+    condition: number;
+    humidity: number;
+  };
 }
 
 const translations = {
@@ -25,6 +42,10 @@ const translations = {
     share: "Share",
     showText: "Show transcript",
     hideText: "Hide transcript",
+    noAudio: "No audio captured. Try speaking closer to the mic.",
+    micDenied: "Microphone access denied.",
+    recordingFailed: "Recording failed. Please try again.",
+    serverError: "Server error. Please try again.",
   },
   hi: {
     title: "वॉइस असिस्टेंट",
@@ -37,40 +58,171 @@ const translations = {
     share: "साझा करें",
     showText: "टेक्स्ट दिखाएं",
     hideText: "टेक्स्ट छुपाएं",
+    noAudio: "ऑडियो कैप्चर नहीं हुआ। माइक के पास बोलें।",
+    micDenied: "माइक्रोफोन एक्सेस अस्वीकृत।",
+    recordingFailed: "रिकॉर्डिंग विफल। पुनः प्रयास करें।",
+    serverError: "सर्वर त्रुटि। पुनः प्रयास करें।",
   },
 };
 
-export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteractionProps) {
+export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: VoiceInteractionProps) {
   const [state, setState] = useState<VoiceState>("idle");
   const [isPlaying, setIsPlaying] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [advisory, setAdvisory] = useState<AgriculturalAdvisory | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordedMimeTypeRef = useRef<string>("audio/webm");
 
   const t = translations[language as keyof typeof translations] || translations.en;
 
-  const demoResponse = language === "hi" 
-    ? "आपकी गेहूं की फसल में पीले पत्ते पोषक तत्वों की कमी का संकेत हो सकते हैं। नाइट्रोजन युक्त खाद डालने की सलाह दी जाती है। सुबह के समय पानी देना सबसे अच्छा रहेगा।"
-    : "The yellow leaves on your wheat crop may indicate nutrient deficiency. I recommend applying nitrogen-rich fertilizer. Watering in the morning hours would be most beneficial for your crop.";
+  function stopStreamTracks() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+  }
 
-  const handleMicClick = () => {
+  const handleMicClick = async () => {
     if (state === "idle" || state === "response") {
-      setState("recording");
-      setTimeout(() => {
-        setState("processing");
-        setTimeout(() => {
-          setState("response");
-          setIsPlaying(true);
-          setTimeout(() => setIsPlaying(false), 4000);
-        }, 2000);
-      }, 3000);
-    } else if (state === "recording") {
-      setState("processing");
-      setTimeout(() => {
-        setState("response");
-        setIsPlaying(true);
-        setTimeout(() => setIsPlaying(false), 4000);
-      }, 2000);
+      setErrorMessage(null);
+      setTranscript("");
+      setAdvisory(null);
+
+      try {
+        // Stop any existing tracks before starting a new one
+        stopStreamTracks();
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        streamRef.current = stream;
+
+        // Find best supported mime type
+        const formats = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus",
+          "audio/mp4",
+          "audio/aac"
+        ];
+
+        let selectedMimeType = "audio/webm";
+        for (const f of formats) {
+          if (MediaRecorder.isTypeSupported(f)) {
+            selectedMimeType = f;
+            break;
+          }
+        }
+
+        recordedMimeTypeRef.current = selectedMimeType;
+        console.log("🎤 Recording with mimeType:", selectedMimeType);
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = mediaRecorder;
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const chunks = audioChunksRef.current;
+          const mime = recordedMimeTypeRef.current;
+
+          if (chunks.length === 0) {
+            console.error("❌ No audio chunks captured");
+            setErrorMessage(t.noAudio);
+            setState("idle");
+            return;
+          }
+
+          const audioBlob = new Blob(chunks, { type: mime });
+          console.log("✅ Audio recording stopped. Size:", audioBlob.size, "bytes");
+
+          stopStreamTracks();
+
+          if (audioBlob.size < MIN_AUDIO_BYTES) {
+            console.warn("⚠️ Audio blob too small:", audioBlob.size, "bytes");
+            setErrorMessage(t.noAudio);
+            setState("idle");
+            return;
+          }
+
+          setState("processing");
+
+          try {
+            const result = await transcribeAndGetAdvice(audioBlob, language, weatherContext);
+
+            if (!result.success) {
+              setErrorMessage(result.error || t.serverError);
+              setState("idle");
+              return;
+            }
+
+            if (result.transcript != null) setTranscript(result.transcript);
+            if (result.advisory != null) setAdvisory(result.advisory);
+            setState("response");
+            setShowTranscript(false);
+
+            if (result.advisory?.recommendation && "speechSynthesis" in window) {
+              setIsPlaying(true);
+              const utterance = new SpeechSynthesisUtterance(result.advisory.recommendation);
+              utterance.lang = language === "hi" ? "hi-IN" : "en-IN";
+              utterance.onend = () => setIsPlaying(false);
+              utterance.onerror = () => setIsPlaying(false);
+              window.speechSynthesis.speak(utterance);
+            }
+          } catch (err) {
+            console.error("❌ Error in transcription flow:", err);
+            setErrorMessage(t.serverError);
+            setState("idle");
+          }
+        };
+
+        mediaRecorder.start(RECORDER_TIMESLICE_MS);
+        setState("recording");
+      } catch (error) {
+        console.error("🎤 Microphone error:", error);
+        stopStreamTracks();
+        const name = error instanceof Error ? error.name : "";
+        let msg = t.recordingFailed;
+
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          msg = t.micDenied;
+        } else if (name === "NotFoundError") {
+          msg = "No microphone found. Please connect one.";
+        }
+
+        setErrorMessage(msg);
+        setState("idle");
+      }
+      return;
+    }
+
+    if (state === "recording") {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+        // stopStreamTracks will be called inside onstop if needed, 
+        // but it's safer to call it after a short delay or ensure onstop handles it.
+        // Actually stopStreamTracks() stops the mic IMMEDIATELY, which might 
+        // gracefully end the MediaRecorder or cut it off.
+        // Better to let MediaRecorder.stop() trigger the clean onstop.
+      }
     }
   };
+
 
   if (!isOpen) return null;
 
@@ -102,6 +254,9 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
               </div>
             </div>
             <p className="text-body text-muted-foreground max-w-xs">{t.tapToSpeak}</p>
+            {errorMessage && (
+              <p className="text-footnote text-destructive max-w-xs mx-auto" role="alert">{errorMessage}</p>
+            )}
           </div>
         )}
 
@@ -131,17 +286,33 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
                 <div className="w-12 h-12 border-4 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin-smooth" />
               </div>
             </div>
-            <p className="text-title font-bold text-primary">{t.thinking}</p>
+            <div className="space-y-2">
+              <p className="text-title font-bold text-primary">{t.thinking}</p>
+              <p className="text-subhead text-muted-foreground animate-pulse">Converting your voice to text...</p>
+            </div>
           </div>
         )}
 
         {/* Response State */}
         {state === "response" && (
           <div className="w-full max-w-md space-y-6 animate-fade-in">
-            {/* Speaker Button */}
+            {/* Speaker Button - speaks advisory recommendation */}
             <div className="flex justify-center">
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={() => {
+                  if (!advisory?.recommendation) return;
+                  if (isPlaying) {
+                    window.speechSynthesis?.cancel();
+                    setIsPlaying(false);
+                  } else {
+                    const utterance = new SpeechSynthesisUtterance(advisory.recommendation);
+                    utterance.lang = language === "hi" ? "hi-IN" : "en-IN";
+                    utterance.onend = () => setIsPlaying(false);
+                    utterance.onerror = () => setIsPlaying(false);
+                    window.speechSynthesis?.speak(utterance);
+                    setIsPlaying(true);
+                  }
+                }}
                 className={cn(
                   "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95",
                   isPlaying
@@ -170,6 +341,14 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
               </div>
             </div>
 
+            {/* Advice always visible */}
+            {advisory && (
+              <div className="p-5 bg-green-wash rounded-apple-lg border-l-4 border-primary">
+                <p className="text-footnote text-muted-foreground uppercase tracking-wide mb-1">{advisory.condition}</p>
+                <p className="text-body text-foreground leading-relaxed">{advisory.recommendation}</p>
+              </div>
+            )}
+
             {/* Transcript Toggle */}
             <button
               onClick={() => setShowTranscript(!showTranscript)}
@@ -179,10 +358,11 @@ export function VoiceInteraction({ isOpen, onClose, language }: VoiceInteraction
               <span>{showTranscript ? t.hideText : t.showText}</span>
             </button>
 
-            {/* Transcript */}
-            {showTranscript && (
-              <div className="p-5 bg-green-wash rounded-apple-lg border-l-4 border-primary animate-fade-in">
-                <p className="text-body text-foreground leading-relaxed">{demoResponse}</p>
+            {/* Transcript (collapsible) */}
+            {showTranscript && transcript && (
+              <div className="p-5 bg-muted/50 rounded-apple-lg border border-border animate-fade-in">
+                <p className="text-footnote text-muted-foreground uppercase tracking-wide mb-1">You said</p>
+                <p className="text-body text-foreground leading-relaxed">{transcript}</p>
               </div>
             )}
 
