@@ -13,22 +13,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { useLibrary } from "@/hooks/useLibrary";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
 
-const translations = {
-  en: {
-    greeting: "Hello, Farmer!",
-    greetingSubtext: "How can I help you today?",
-    recentQueries: "Recent Queries",
-    tapToSpeak: "Tap to ask a question",
-    scanCrop: "Scan Crop",
-  },
-  hi: {
-    greeting: "नमस्ते, किसान!",
-    greetingSubtext: "आज मैं आपकी कैसे मदद कर सकता हूँ?",
-    recentQueries: "हाल के प्रश्न",
-    tapToSpeak: "सवाल पूछने के लिए टैप करें",
-    scanCrop: "फसल स्कैन करें",
-  },
-};
+import { getTranslation } from "@/lib/translations";
 
 type NavTab = "home" | "analyze" | "library" | "settings";
 
@@ -44,7 +29,7 @@ export default function Index() {
   const [isWeatherLoading, setIsWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
-  const t = translations[language as keyof typeof translations] || translations.en;
+  const t = getTranslation('home', language);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -142,6 +127,7 @@ export default function Index() {
             data={weatherData}
             loading={isWeatherLoading}
             error={weatherError}
+            language={language}
           />
         </header>
 

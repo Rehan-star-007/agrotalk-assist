@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
-import { X, Camera, Upload, Volume2, CheckCircle, AlertCircle, Loader2, Sparkles, Leaf, RotateCcw, BookmarkPlus, Share2 } from "lucide-react";
+import { X, Camera, Upload, Volume2, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
 import { useLibrary } from "@/hooks/useLibrary";
 import { toast } from "sonner";
+import { getTranslation, type SupportedLanguage } from "@/lib/translations";
 
 type AnalysisState = "camera" | "uploading" | "analyzing" | "result";
 
@@ -13,67 +14,6 @@ interface ImageAnalysisProps {
   onClose: () => void;
   language: string;
 }
-
-const translations = {
-  en: {
-    title: "Plant Scanner",
-    subtitle: "AI-Powered Analysis",
-    takePhoto: "Take Photo",
-    uploadPhoto: "Upload from Gallery",
-    uploading: "Uploading...",
-    analyzing: "Analyzing Plant...",
-    analyzingNote: "Using advanced AI detection",
-    confidence: "Confidence",
-    severity: "Severity",
-    low: "Mild",
-    medium: "Moderate",
-    high: "Critical",
-    symptoms: "Symptoms",
-    treatment: "Treatment Plan",
-    organic: "Organic Options",
-    prevention: "Prevention Tips",
-    hearAdvice: "Listen to Advice",
-    scanAnother: "Scan Another Plant",
-    tryAgain: "Try Again",
-    errorTitle: "Analysis Failed",
-    detectingCrop: "Identifying Plant...",
-    identifyingDisease: "Analyzing Health...",
-    healthy: "Plant is Healthy",
-    diseaseDetected: "Issue Detected",
-    save: "Save",
-    share: "Share",
-    positionLeaf: "Position a leaf in the frame",
-  },
-  hi: {
-    title: "पौधा स्कैनर",
-    subtitle: "AI विश्लेषण",
-    takePhoto: "फोटो लें",
-    uploadPhoto: "गैलरी से अपलोड करें",
-    uploading: "अपलोड हो रहा है...",
-    analyzing: "विश्लेषण हो रहा है...",
-    analyzingNote: "उन्नत AI का उपयोग",
-    confidence: "विश्वास",
-    severity: "गंभीरता",
-    low: "हल्का",
-    medium: "मध्यम",
-    high: "गंभीर",
-    symptoms: "लक्षण",
-    treatment: "उपचार योजना",
-    organic: "जैविक विकल्प",
-    prevention: "रोकथाम",
-    hearAdvice: "सलाह सुनें",
-    scanAnother: "नया स्कैन करें",
-    tryAgain: "पुनः प्रयास करें",
-    errorTitle: "विश्लेषण विफल",
-    detectingCrop: "पौधा पहचान...",
-    identifyingDisease: "स्वास्थ्य विश्लेषण...",
-    healthy: "पौधा स्वस्थ है",
-    diseaseDetected: "समस्या मिली",
-    save: "सहेजें",
-    share: "साझा करें",
-    positionLeaf: "पत्ती को फ्रेम में रखें",
-  },
-};
 
 export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps) {
   const [state, setState] = useState<AnalysisState>("camera");
@@ -85,7 +25,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   const { addItem } = useLibrary();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const t = translations[language as keyof typeof translations] || translations.en;
+  const t = getTranslation('image', language);
+  const tCommon = getTranslation('common', language);
   const isHindi = language === "hi";
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,19 +114,24 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
       const desc = isHindi ? analysisResult.description_hindi : analysisResult.description;
       const text = `${name}. ${desc}`;
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = isHindi ? "hi-IN" : "en-US";
+      utterance.lang = language === "hi" ? "hi-IN" : language === "ta" ? "ta-IN" : language === "te" ? "te-IN" : language === "mr" ? "mr-IN" : "en-US";
       window.speechSynthesis.speak(utterance);
     }
+  };
+
+  const handleClose = () => {
+    resetAnalysis();
+    onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
+      {/* Header - Always visible */}
+      <header className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
         <button
-          onClick={() => { resetAnalysis(); onClose(); }}
+          onClick={handleClose}
           className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95"
         >
           <X size={20} />
@@ -199,13 +145,16 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
         </div>
       </header>
 
+      {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         {/* Camera State */}
         {state === "camera" && (
-          <div className="flex flex-col items-center justify-center p-6 flex-1 animate-fade-in">
+          <div className="flex flex-col items-center justify-center p-6 min-h-[60vh] animate-fade-in">
             {/* Upload Area */}
-            <div className="relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed border-primary bg-background flex flex-col items-center justify-center p-8 hover:bg-green-wash hover:border-primary/70 transition-all cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}>
+            <div 
+              className="relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed border-primary bg-background flex flex-col items-center justify-center p-8 hover:bg-green-wash hover:border-primary/70 transition-all cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
               <div className="w-16 h-16 rounded-full bg-green-wash flex items-center justify-center mb-4">
                 <Camera className="w-8 h-8 text-primary" />
               </div>
@@ -238,13 +187,13 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
         {/* Loading State */}
         {(state === "uploading" || state === "analyzing") && (
-          <div className="flex flex-col items-center justify-center p-8 flex-1 animate-fade-in">
+          <div className="flex flex-col items-center justify-center p-8 min-h-[60vh] animate-fade-in">
             <div className="relative w-64 h-64 rounded-apple-lg overflow-hidden shadow-apple-lg">
               {previewImage && (
                 <img src={previewImage} alt="Scanning" className="w-full h-full object-cover" />
               )}
               <div className="absolute inset-0 border-2 border-primary/50 rounded-apple-lg" />
-              <div className="absolute top-0 left-0 w-full h-1 bg-primary shadow-[0_0_15px_rgba(16,185,129,0.8)] animate-scan-line" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-primary shadow-[0_0_15px_hsl(var(--primary))] animate-scan-line" />
             </div>
 
             <div className="mt-8 text-center space-y-3">
@@ -271,7 +220,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
         {/* Result State */}
         {state === "result" && (
-          <div className="p-5 pb-10 animate-slide-up">
+          <div className="p-5 pb-24 animate-slide-up">
             {/* Image Preview */}
             {previewImage && (
               <div className="relative rounded-apple-lg overflow-hidden shadow-apple-lg bg-muted mb-6">
@@ -290,7 +239,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 <h3 className="text-headline font-bold text-destructive mb-2">{t.errorTitle}</h3>
                 <p className="text-subhead text-muted-foreground mb-4">{errorMessage}</p>
                 <Button variant="outline" onClick={resetAnalysis} className="text-destructive border-destructive/30">
-                  <RotateCcw className="mr-2 h-4 w-4" /> {t.tryAgain}
+                  <RotateCcw className="mr-2 h-4 w-4" /> {tCommon.tryAgain}
                 </Button>
               </div>
             ) : analysisResult && (
@@ -381,10 +330,10 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                     <div className="bg-foreground text-background p-5 rounded-apple-lg space-y-4">
                       {(isHindi ? analysisResult.treatment_steps_hindi : analysisResult.treatment_steps).map((step, i) => (
                         <div key={i} className="flex gap-4">
-                          <span className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-subhead font-bold text-primary-foreground flex-shrink-0">
+                          <span className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold flex-shrink-0">
                             {i + 1}
                           </span>
-                          <p className="text-subhead opacity-90 pt-1">{step}</p>
+                          <p className="text-subhead leading-relaxed pt-1">{step}</p>
                         </div>
                       ))}
                     </div>
@@ -394,27 +343,27 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 {/* Organic Options */}
                 {analysisResult.organic_options && analysisResult.organic_options.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-caption font-bold uppercase tracking-widest text-primary">{t.organic}</h3>
-                    <div className="space-y-2">
+                    <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.organic}</h3>
+                    <div className="p-4 bg-green-wash rounded-apple-lg border border-primary/20 space-y-3">
                       {(isHindi ? analysisResult.organic_options_hindi : analysisResult.organic_options).map((opt, i) => (
-                        <div key={i} className="flex items-center gap-3 p-3 bg-green-wash border border-primary/20 rounded-apple">
-                          <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
-                          <p className="text-subhead font-medium text-foreground">{opt}</p>
+                        <div key={i} className="flex items-start gap-3">
+                          <CheckCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                          <p className="text-subhead text-foreground">{opt}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Prevention */}
+                {/* Prevention Tips */}
                 {analysisResult.prevention_tips && analysisResult.prevention_tips.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.prevention}</h3>
-                    <div className="space-y-2">
+                    <div className="p-4 bg-muted rounded-apple-lg border border-border space-y-3">
                       {(isHindi ? analysisResult.prevention_tips_hindi : analysisResult.prevention_tips).map((tip, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-muted rounded-apple border border-border">
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
-                          <p className="text-subhead text-muted-foreground">{tip}</p>
+                        <div key={i} className="flex items-start gap-3">
+                          <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
+                          <p className="text-subhead text-foreground">{tip}</p>
                         </div>
                       ))}
                     </div>
@@ -422,46 +371,24 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <Button
-                    variant={isSaved ? "default" : "outline"}
-                    className={cn(
-                      "flex-1 h-12 rounded-apple border-2 transition-all",
-                      isSaved && "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
-                    )}
-                    disabled={isSaved}
-                  >
-                    {isSaved ? <CheckCircle className="mr-2 h-4 w-4" /> : <BookmarkPlus className="mr-2 h-4 w-4" />}
-                    {isSaved ? (isHindi ? "सहेजा गया" : "Saved") : t.save}
+                <div className="flex gap-3 pt-2">
+                  <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
+                    <Share2 size={18} />
+                    {tCommon.share}
                   </Button>
-                  <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 active:scale-[0.98]">
-                    <Share2 className="mr-2 h-4 w-4" /> {t.share}
+                  <Button 
+                    onClick={resetAnalysis}
+                    className="flex-1 h-12 rounded-apple bg-primary hover:bg-primary/90 gap-2 active:scale-[0.98]"
+                  >
+                    <Camera size={18} />
+                    {t.scanAnother}
                   </Button>
                 </div>
-
-                {/* Scan Another */}
-                <Button
-                  variant="ghost"
-                  className="w-full h-12 rounded-apple text-muted-foreground hover:text-foreground active:scale-[0.98]"
-                  onClick={resetAnalysis}
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" /> {t.scanAnother}
-                </Button>
               </div>
             )}
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes scan {
-          0% { top: 0% }
-          100% { top: 100% }
-        }
-        .animate-scan-line {
-          animation: scan 2.5s linear infinite;
-        }
-      `}</style>
     </div>
   );
 }

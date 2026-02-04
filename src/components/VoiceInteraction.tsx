@@ -1,23 +1,17 @@
 import { useState, useRef } from "react";
-import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic } from "lucide-react";
+import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic, Sparkles, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import { Button } from "./ui/button";
 import { transcribeAndGetAdvice } from "@/lib/apiClient";
 import type { AgriculturalAdvisory } from "@/lib/apiClient";
+import { getTranslation, type SupportedLanguage } from "@/lib/translations";
 
 type VoiceState = "idle" | "recording" | "processing" | "response";
 
 const MIN_AUDIO_BYTES = 1000;
 const RECORDER_TIMESLICE_MS = 250;
-
-function getSupportedMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus";
-  if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
-  return undefined;
-}
 
 interface VoiceInteractionProps {
   isOpen: boolean;
@@ -29,41 +23,6 @@ interface VoiceInteractionProps {
     humidity: number;
   };
 }
-
-const translations = {
-  en: {
-    title: "Voice Assistant",
-    listening: "Listening...",
-    thinking: "Processing...",
-    tapToSpeak: "Tap the mic to ask a question",
-    stopRecording: "Tap to stop",
-    askAnother: "Ask another question",
-    save: "Save",
-    share: "Share",
-    showText: "Show transcript",
-    hideText: "Hide transcript",
-    noAudio: "No audio captured. Try speaking closer to the mic.",
-    micDenied: "Microphone access denied.",
-    recordingFailed: "Recording failed. Please try again.",
-    serverError: "Server error. Please try again.",
-  },
-  hi: {
-    title: "वॉइस असिस्टेंट",
-    listening: "सुन रहा हूँ...",
-    thinking: "प्रोसेसिंग...",
-    tapToSpeak: "सवाल पूछने के लिए माइक टैप करें",
-    stopRecording: "रोकने के लिए टैप करें",
-    askAnother: "एक और सवाल पूछें",
-    save: "सहेजें",
-    share: "साझा करें",
-    showText: "टेक्स्ट दिखाएं",
-    hideText: "टेक्स्ट छुपाएं",
-    noAudio: "ऑडियो कैप्चर नहीं हुआ। माइक के पास बोलें।",
-    micDenied: "माइक्रोफोन एक्सेस अस्वीकृत।",
-    recordingFailed: "रिकॉर्डिंग विफल। पुनः प्रयास करें।",
-    serverError: "सर्वर त्रुटि। पुनः प्रयास करें।",
-  },
-};
 
 export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: VoiceInteractionProps) {
   const [state, setState] = useState<VoiceState>("idle");
@@ -78,7 +37,8 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
   const audioChunksRef = useRef<Blob[]>([]);
   const recordedMimeTypeRef = useRef<string>("audio/webm");
 
-  const t = translations[language as keyof typeof translations] || translations.en;
+  const t = getTranslation('voice', language);
+  const tCommon = getTranslation('common', language);
 
   function stopStreamTracks() {
     if (streamRef.current) {
@@ -95,7 +55,6 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
       setAdvisory(null);
 
       try {
-        // Stop any existing tracks before starting a new one
         stopStreamTracks();
 
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -107,7 +66,6 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
         });
         streamRef.current = stream;
 
-        // Find best supported mime type
         const formats = [
           "audio/webm;codecs=opus",
           "audio/webm",
@@ -179,7 +137,7 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
             if (result.advisory?.recommendation && "speechSynthesis" in window) {
               setIsPlaying(true);
               const utterance = new SpeechSynthesisUtterance(result.advisory.recommendation);
-              utterance.lang = language === "hi" ? "hi-IN" : "en-IN";
+              utterance.lang = language === "hi" ? "hi-IN" : language === "ta" ? "ta-IN" : language === "te" ? "te-IN" : language === "mr" ? "mr-IN" : "en-IN";
               utterance.onend = () => setIsPlaying(false);
               utterance.onerror = () => setIsPlaying(false);
               window.speechSynthesis.speak(utterance);
@@ -214,15 +172,24 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
     if (state === "recording") {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
-        // stopStreamTracks will be called inside onstop if needed, 
-        // but it's safer to call it after a short delay or ensure onstop handles it.
-        // Actually stopStreamTracks() stops the mic IMMEDIATELY, which might 
-        // gracefully end the MediaRecorder or cut it off.
-        // Better to let MediaRecorder.stop() trigger the clean onstop.
       }
     }
   };
 
+  const handlePlayAudio = () => {
+    if (!advisory?.recommendation) return;
+    if (isPlaying) {
+      window.speechSynthesis?.cancel();
+      setIsPlaying(false);
+    } else {
+      const utterance = new SpeechSynthesisUtterance(advisory.recommendation);
+      utterance.lang = language === "hi" ? "hi-IN" : language === "ta" ? "ta-IN" : language === "te" ? "te-IN" : language === "mr" ? "mr-IN" : "en-IN";
+      utterance.onend = () => setIsPlaying(false);
+      utterance.onerror = () => setIsPlaying(false);
+      window.speechSynthesis?.speak(utterance);
+      setIsPlaying(true);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -233,22 +200,25 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
         <button
           onClick={onClose}
           className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95"
-          aria-label="Close"
+          aria-label={tCommon.close}
         >
           <X size={20} />
         </button>
-        <h1 className="text-headline font-bold text-foreground">{t.title}</h1>
-        <div className="w-10" />
+        <div className="text-center">
+          <h1 className="text-headline font-bold text-foreground">{t.title}</h1>
+        </div>
+        <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-green-wash">
+          <Mic className="w-5 h-5 text-primary" />
+        </div>
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto">
         {/* Idle State */}
         {state === "idle" && (
           <div className="text-center space-y-8 animate-fade-in">
-            {/* Voice Orb */}
             <div className="relative w-48 h-48 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-breathing" />
+              <div className="absolute inset-0 rounded-full bg-green-wash animate-breathing" />
               <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green flex items-center justify-center">
                 <Mic className="w-16 h-16 text-primary-foreground" />
               </div>
@@ -263,9 +233,8 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
         {/* Recording State */}
         {state === "recording" && (
           <div className="text-center space-y-8 animate-fade-in">
-            {/* Animated Orb */}
             <div className="relative w-48 h-48 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-pulse-ring-active" />
+              <div className="absolute inset-0 rounded-full bg-green-wash animate-pulse-ring-active" />
               <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green-lg flex items-center justify-center overflow-hidden">
                 <WaveformVisualizer isActive={true} barCount={24} />
               </div>
@@ -281,87 +250,89 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
         {state === "processing" && (
           <div className="text-center space-y-8 animate-fade-in">
             <div className="relative w-48 h-48 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-breathing" />
+              <div className="absolute inset-0 rounded-full bg-green-wash animate-breathing" />
               <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-primary/80 shadow-green flex items-center justify-center">
                 <div className="w-12 h-12 border-4 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin-smooth" />
               </div>
             </div>
             <div className="space-y-2">
               <p className="text-title font-bold text-primary">{t.thinking}</p>
-              <p className="text-subhead text-muted-foreground animate-pulse">Converting your voice to text...</p>
+              <p className="text-subhead text-muted-foreground animate-pulse">{tCommon.loading}</p>
             </div>
           </div>
         )}
 
-        {/* Response State */}
+        {/* Response State - Premium UI */}
         {state === "response" && (
-          <div className="w-full max-w-md space-y-6 animate-fade-in">
-            {/* Speaker Button - speaks advisory recommendation */}
-            <div className="flex justify-center">
-              <button
-                onClick={() => {
-                  if (!advisory?.recommendation) return;
-                  if (isPlaying) {
-                    window.speechSynthesis?.cancel();
-                    setIsPlaying(false);
-                  } else {
-                    const utterance = new SpeechSynthesisUtterance(advisory.recommendation);
-                    utterance.lang = language === "hi" ? "hi-IN" : "en-IN";
-                    utterance.onend = () => setIsPlaying(false);
-                    utterance.onerror = () => setIsPlaying(false);
-                    window.speechSynthesis?.speak(utterance);
-                    setIsPlaying(true);
-                  }
-                }}
-                className={cn(
-                  "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95",
-                  isPlaying
-                    ? "bg-primary text-primary-foreground shadow-green"
-                    : "bg-green-wash text-primary border-2 border-primary/20 hover:bg-green-subtle"
-                )}
-                aria-label={isPlaying ? "Pause" : "Play response"}
-              >
-                {isPlaying ? <Volume2 size={40} /> : <VolumeX size={40} />}
-              </button>
+          <div className="w-full max-w-md space-y-5 animate-fade-in py-4">
+            {/* Success Header */}
+            <div className="flex items-center justify-center gap-3 p-4 bg-green-wash rounded-apple-lg border border-primary/20">
+              <CheckCircle className="w-6 h-6 text-primary" />
+              <span className="text-headline font-bold text-primary">{tCommon.success}</span>
             </div>
 
-            {/* Status */}
-            <div className="flex justify-center">
-              <div className={cn(
-                "inline-flex items-center gap-2 px-4 py-2 rounded-full text-footnote font-semibold",
-                isPlaying ? "bg-green-wash text-primary" : "bg-muted text-muted-foreground"
-              )}>
-                {isPlaying && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                )}
-                <span>{isPlaying ? "Speaking..." : "Tap to play"}</span>
+            {/* Audio Player Card */}
+            <div className="bg-card rounded-apple-lg border border-border shadow-apple p-5">
+              {/* Play Button */}
+              <div className="flex justify-center mb-4">
+                <button
+                  onClick={handlePlayAudio}
+                  className={cn(
+                    "w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 shadow-apple",
+                    isPlaying
+                      ? "bg-primary text-primary-foreground shadow-green"
+                      : "bg-green-wash text-primary border-2 border-primary/20 hover:bg-green-subtle"
+                  )}
+                  aria-label={isPlaying ? "Pause" : "Play response"}
+                >
+                  {isPlaying ? <Volume2 size={36} /> : <VolumeX size={36} />}
+                </button>
               </div>
-            </div>
 
-            {/* Advice always visible */}
-            {advisory && (
-              <div className="p-5 bg-green-wash rounded-apple-lg border-l-4 border-primary">
-                <p className="text-footnote text-muted-foreground uppercase tracking-wide mb-1">{advisory.condition}</p>
-                <p className="text-body text-foreground leading-relaxed">{advisory.recommendation}</p>
+              {/* Status Indicator */}
+              <div className="flex justify-center mb-4">
+                <div className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2 rounded-full text-caption font-semibold",
+                  isPlaying ? "bg-green-wash text-primary" : "bg-muted text-muted-foreground"
+                )}>
+                  {isPlaying && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                  )}
+                  <span>{isPlaying ? t.speaking : t.tapToPlay}</span>
+                </div>
               </div>
-            )}
+
+              {/* Advice Content */}
+              {advisory && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span className="text-caption font-bold uppercase tracking-widest text-primary">{t.advice}</span>
+                  </div>
+                  <div className="p-4 bg-green-wash/50 rounded-apple border-l-4 border-primary">
+                    <p className="text-footnote text-muted-foreground mb-1">{advisory.condition}</p>
+                    <p className="text-body text-foreground leading-relaxed">{advisory.recommendation}</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Transcript Toggle */}
             <button
               onClick={() => setShowTranscript(!showTranscript)}
-              className="w-full flex items-center justify-center gap-2 py-3 text-subhead text-muted-foreground hover:text-foreground transition-colors active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 py-3 text-subhead text-muted-foreground hover:text-foreground transition-colors active:scale-[0.98] bg-muted/50 rounded-apple"
             >
               {showTranscript ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               <span>{showTranscript ? t.hideText : t.showText}</span>
             </button>
 
-            {/* Transcript (collapsible) */}
+            {/* Transcript */}
             {showTranscript && transcript && (
-              <div className="p-5 bg-muted/50 rounded-apple-lg border border-border animate-fade-in">
-                <p className="text-footnote text-muted-foreground uppercase tracking-wide mb-1">You said</p>
+              <div className="p-4 bg-muted/50 rounded-apple border border-border animate-fade-in">
+                <p className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-2">{t.youSaid}</p>
                 <p className="text-body text-foreground leading-relaxed">{transcript}</p>
               </div>
             )}
@@ -370,11 +341,11 @@ export function VoiceInteraction({ isOpen, onClose, language, weatherContext }: 
             <div className="flex gap-3 pt-2">
               <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
                 <Share2 size={18} />
-                {t.share}
+                {tCommon.share}
               </Button>
               <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
                 <BookmarkPlus size={18} />
-                {t.save}
+                {tCommon.save}
               </Button>
             </div>
           </div>
