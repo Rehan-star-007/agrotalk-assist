@@ -8,7 +8,9 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '.env.openrouter') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env.nvidia') });
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.openrouter') });
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.nvidia') });
 const express = require('express');
 const cors = require('cors');
 const analyzeRoute = require('./routes/analyze');
@@ -62,6 +64,10 @@ app.use('/chat', chatRoute);
 // Market analysis endpoint
 const marketRoute = require('./routes/market');
 app.use('/market', marketRoute);
+
+// Dedicated TTS endpoint
+const ttsRoute = require('./routes/tts');
+app.use('/api/tts', ttsRoute);
 
 // Serve uploads as static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

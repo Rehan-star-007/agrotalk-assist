@@ -108,19 +108,32 @@ export const mandiService = {
                 url += `&filters[commodity]=${encodeURIComponent(commodity)}`;
             }
 
+            console.log(`📡 Fetching Mandi Prices: ${url.replace(API_KEY, 'HIDDEN')}`);
+
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`API responded with status: ${response.status}`);
             }
 
             const data = await response.json();
+
+            // If API returns no records, fall back to mock data so the UI isn't empty
+            if (!data.records || data.records.length === 0) {
+                console.warn("⚠️ Mandi API returned empty records. Using mock data as fallback.");
+                return {
+                    records: MOCK_RECORDS,
+                    total: MOCK_RECORDS.length,
+                    count: MOCK_RECORDS.length
+                };
+            }
+
             return {
                 records: data.records,
                 total: data.total,
                 count: data.count
             };
         } catch (error) {
-            console.error("Error fetching mandi prices:", error);
+            console.error("❌ Error fetching mandi prices:", error);
             // Fallback to mock data on error
             return {
                 records: MOCK_RECORDS,
