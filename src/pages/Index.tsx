@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Camera, X, Volume2, VolumeX, Send, Sparkles, Bot, User, Play, Pause, RotateCcw, Mic } from "lucide-react";
+import { Camera, X, Volume2, VolumeX, Send, Sparkles, Bot, User, Play, Pause, RotateCcw, Mic, ChevronDown, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
@@ -18,6 +18,7 @@ import { useChat } from "@/hooks/useChat";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
 import { getTranslation } from "@/lib/translations";
 import { getTextAdvice, ConversationMessage } from "@/lib/apiClient";
+import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -65,6 +66,19 @@ export default function Index() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const accumulatedTranscriptRef = useRef("");
+  const voiceMenuRef = useRef<HTMLDivElement>(null);
+
+  const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("agrovoice_voice") || "mia");
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+
+
+
+  // Available NVIDIA voices
+  const voiceOptions = [
+    { id: "mia", name: "Mia", label: language === 'hi' ? 'मिया (महिला)' : 'Mia (Female)' },
+    { id: "aria", name: "Aria", label: language === 'hi' ? 'आरिया (महिला)' : 'Aria (Female)' },
+    { id: "sofia", name: "Sofia", label: language === 'hi' ? 'सोफिया (महिला)' : 'Sofia (Female)' },
+  ];
 
   const t = getTranslation('home', language);
   const tVoice = getTranslation('voice', language);
@@ -123,6 +137,18 @@ export default function Index() {
       setCurrentPlayingId(null);
     }
   }, [isMuted, ttsAudio]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (voiceMenuRef.current && !voiceMenuRef.current.contains(event.target as Node)) {
+        setShowVoiceMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -230,7 +256,7 @@ export default function Index() {
         humidity: weatherData.current.relative_humidity_2m
       } : undefined;
 
-      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId);
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId, selectedVoice);
 
       if (result.success && result.advisory) {
         addMessage('assistant', result.advisory.recommendation, result.advisory.condition);
@@ -375,7 +401,7 @@ export default function Index() {
       return (
         <div className="flex flex-col h-full bg-background pb-24">
           {/* Chat Header with mute and exit */}
-          <header className="relative flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
+          <header className="relative z-50 flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
             <button onClick={exitChat} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 border border-border/50 shadow-sm hover:bg-muted transition-all active:scale-95">
               <X size={18} className="text-muted-foreground" />
             </button>
@@ -385,6 +411,59 @@ export default function Index() {
               <h1 className="text-headline font-bold text-primary">
                 AgroTalk
               </h1>
+            </div>
+
+            {/* Voice Model Selector */}
+            <div className="relative mx-2" ref={voiceMenuRef}>
+              <button
+                onClick={() => setShowVoiceMenu(!showVoiceMenu)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 h-10 rounded-xl border shadow-sm transition-all active:scale-95",
+                  showVoiceMenu
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-white/80 border-border/50 hover:bg-muted hover:border-primary/30"
+                )}
+              >
+                <Volume2 size={14} className={showVoiceMenu ? "text-primary" : "text-primary"} />
+                <span className={cn("text-xs font-medium capitalize", showVoiceMenu ? "text-primary" : "text-foreground")}>
+                  {selectedVoice}
+                </span>
+                <ChevronDown size={14} className={cn("text-muted-foreground transition-transform duration-200", showVoiceMenu && "rotate-180 text-primary")} />
+              </button>
+
+              {showVoiceMenu && (
+                <div className="absolute right-0 top-full mt-2 z-50 w-48 bg-white rounded-xl border border-border/50 shadow-xl py-1 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="px-3 py-2 border-b border-border/30 bg-muted/30">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                      {language === 'hi' ? 'आवाज़ चुनें' : 'Select Voice'}
+                    </span>
+                  </div>
+                  <div className="p-1">
+                    {voiceOptions.map((voice) => (
+                      <button
+                        key={voice.id}
+                        onClick={() => {
+                          setSelectedVoice(voice.id);
+                          localStorage.setItem("agrovoice_voice", voice.id);
+                          setShowVoiceMenu(false);
+                        }}
+                        className={cn(
+                          "w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 rounded-lg transition-colors",
+                          selectedVoice === voice.id
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "text-foreground/80 hover:bg-muted"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-2 h-2 rounded-full ring-2 ring-offset-1",
+                          selectedVoice === voice.id ? "bg-primary ring-primary/30" : "bg-border ring-transparent"
+                        )} />
+                        {voice.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -487,18 +566,18 @@ export default function Index() {
           </ScrollArea>
 
           {/* Chat Input */}
-          <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-4 pb-6">
+          <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-3 pb-4">
             <div className="max-w-2xl mx-auto flex items-center gap-3">
               <button
                 onClick={handleMicClick}
                 className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95",
+                  "w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95",
                   isRecording
                     ? "bg-red-500 text-white animate-pulse"
-                    : "bg-primary/10 text-primary hover:bg-primary/20"
+                    : "bg-primary text-white shadow-green"
                 )}
               >
-                <Mic size={20} />
+                <Mic size={24} />
               </button>
               <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
                 <div className="relative flex-1">
@@ -507,16 +586,31 @@ export default function Index() {
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     placeholder={getPlaceholderText()}
-                    className="w-full h-12 pl-5 pr-12 rounded-full bg-white border-2 border-border/50 text-body focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all"
+                    className={cn(
+                      "w-full h-14 pl-5 pr-14 rounded-full",
+                      "bg-white border-2 border-border",
+                      "text-body placeholder:text-muted-foreground/60",
+                      "focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10",
+                      "transition-all duration-200 shadow-apple-sm",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
                     disabled={isProcessing}
                   />
                   {textInput.trim() && (
                     <button
                       type="submit"
                       disabled={isProcessing}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary-dark text-white flex items-center justify-center shadow-lg active:scale-95"
+                      className={cn(
+                        "absolute right-2 top-1/2 -translate-y-1/2",
+                        "w-10 h-10 rounded-full",
+                        "bg-[#76b900] text-white",
+                        "flex items-center justify-center",
+                        "hover:bg-[#5da600]",
+                        "active:scale-95 transition-all duration-200",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
                     >
-                      <Send size={16} />
+                      <ArrowRight size={20} strokeWidth={2.5} />
                     </button>
                   )}
                 </div>
@@ -538,8 +632,8 @@ export default function Index() {
 
           {/* Hero Section with Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-wash mb-4 overflow-hidden">
-              <img src="/logo.svg" alt="AgroTalk" className="w-16 h-16" />
+            <div className="mb-4 flex justify-center">
+              <img src="/logo.svg" alt="AgroTalk" className="w-32 h-32" />
             </div>
             <h1 className="text-title-lg font-bold text-foreground">{t.greeting}</h1>
             <p className="text-body text-muted-foreground mt-2">{t.greetingSubtext}</p>
@@ -579,9 +673,17 @@ export default function Index() {
               {textInput.trim() && (
                 <button
                   type="submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-dark text-white flex items-center justify-center shadow-lg active:scale-95"
+                  className={cn(
+                    "absolute right-2 top-1/2 -translate-y-1/2",
+                    "w-10 h-10 rounded-full",
+                    "bg-[#76b900] text-white",
+                    "flex items-center justify-center",
+                    "hover:bg-[#5da600]",
+                    "active:scale-95 transition-all duration-200",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
                 >
-                  <Send size={18} />
+                  <ArrowRight size={20} strokeWidth={2.5} />
                 </button>
               )}
             </div>
@@ -626,6 +728,48 @@ export default function Index() {
     );
   };
 
+  const handleShareToChat = (analysis: any) => {
+    setIsImageOpen(false);
+    setIsChatMode(true);
+
+    // Create a context summary for the AI
+    const contextText = language === "hi"
+      ? `विषय: ${analysis.cropTypeHi}\nरोग: ${analysis.diseaseNameHi}\nलक्षण: ${analysis.symptomsHi?.join(", ")}\nउपचार: ${analysis.treatmentHi?.join(", ")}`
+      : `Subject: ${analysis.cropType}\nCondition: ${analysis.diseaseName}\nSymptoms: ${analysis.symptoms?.join(", ")}\nTreatment: ${analysis.treatment_steps?.join(", ")}`;
+
+    const introMsg = language === "hi"
+      ? `मैंने अपनी ${analysis.cropTypeHi} की जांच साझा की है। मुझे इसके बारे में कुछ पूछना है।`
+      : `I've shared my analysis for ${analysis.cropType}. I have some questions about it.`;
+
+    // Add the analysis as a system-like context message and the user intro
+    const newMessages: ChatMessage[] = [
+      {
+        id: `context_${Date.now()}`,
+        role: 'assistant',
+        content: `**Analysis Context Shared:**\n\n${contextText}`,
+        timestamp: new Date(),
+        condition: analysis.severity
+      },
+      {
+        id: `user_intro_${Date.now() + 1}`,
+        role: 'user',
+        content: introMsg,
+        timestamp: new Date()
+      }
+    ];
+
+    setChatMessages(prev => [...prev, ...newMessages]);
+
+    // Update conversation history for LLM context
+    setConversationHistory(prev => [
+      ...prev,
+      { role: 'assistant' as const, content: `CONTEXT: User shared a ${analysis.cropType} analysis showing ${analysis.diseaseName}. Severity: ${analysis.severity}. Details: ${analysis.description}` },
+      { role: 'user' as const, content: introMsg }
+    ].slice(-10));
+
+    toast.success(language === "hi" ? "चैट में विश्लेषण जोड़ा गया" : "Analysis added to chat context");
+  };
+
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       {!isOnline && <OfflineBanner language={language} />}
@@ -649,6 +793,7 @@ export default function Index() {
         isOpen={isImageOpen}
         onClose={() => { setIsImageOpen(false); refreshLibrary(); }}
         language={language}
+        onShareChat={handleShareToChat}
       />
     </div>
   );

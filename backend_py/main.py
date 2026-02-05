@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from models.yolo_detector import PlantDiseaseDetector
 from utils.image_processing import decode_base64_image, preprocess_image
 from utils.visualization import process_and_visualize
-from services.tts_service import TTSService
+from services.nvidia_tts import NvidiaTTSService
 from services.nvidia_vision import NvidiaVisionService
 import io
 import base64
@@ -43,7 +43,7 @@ class AnalyzeRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     language: Optional[str] = "en"
-    gender: Optional[str] = "male"
+    voice: Optional[str] = "mia"  # mia, aria, sofia
 
 class AnalyzeResponse(BaseModel):
     success: bool
@@ -64,8 +64,8 @@ async def startup_event():
     print("🧠 Initializing NVIDIA Vision Service...")
     nvidia_service = NvidiaVisionService()
     
-    print("🎤 Initialize TTS Service...")
-    tts_service = TTSService()
+    print("🎤 Initializing NVIDIA TTS Service...")
+    tts_service = NvidiaTTSService()
     
     print("✅ Server ready!")
 
@@ -204,7 +204,8 @@ async def generate_speech(request: TTSRequest):
     try:
         # Normalize language code (handle en-US, hi-IN etc.)
         lang_code = request.language.split("-")[0].lower() if request.language else "en"
-        audio_bytes = await tts_service.generate_audio(request.text, lang_code, request.gender)
+        voice = request.voice or "mia"
+        audio_bytes = await tts_service.generate_audio(request.text, lang_code, voice)
         if not audio_bytes:
              raise HTTPException(status_code=500, detail="TTS generation failed")
              
@@ -213,7 +214,7 @@ async def generate_speech(request: TTSRequest):
         return {
             "success": True,
             "audio": audio_base64,
-            "content_type": "audio/mp3"
+            "content_type": "audio/wav"
         }
     except Exception as e:
         print(f"❌ [TTS] Error: {e}")

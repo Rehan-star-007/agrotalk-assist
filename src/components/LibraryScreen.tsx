@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2, Sun, CloudRain, CloudSnow, Wind } from "lucide-react";
+import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2, Sun, Moon, CloudRain, CloudSnow, Wind } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { useLibrary, LibraryItem } from "@/hooks/useLibrary";
@@ -102,8 +102,12 @@ const getWeatherLabel = (code: number, isHindi: boolean): string => {
   return isHindi ? "मौसम" : "Weather";
 };
 
-const WeatherIcon: React.FC<{ code: number }> = ({ code }) => {
-  if (code === 0 || code === 1) return <Sun size={48} className="opacity-90 text-amber-400" />;
+const WeatherIcon: React.FC<{ code: number; isNight?: boolean }> = ({ code, isNight = false }) => {
+  if (code === 0 || code === 1) {
+    return isNight ?
+      <Moon size={48} className="opacity-90 text-slate-200" /> :
+      <Sun size={48} className="opacity-90 text-amber-400" />;
+  }
   if (code === 2 || code === 3) return <Cloud size={48} className="opacity-90" />;
   if (code >= 51 && code <= 67) return <CloudRain size={48} className="opacity-90" />;
   if (code >= 71 && code <= 86) return <CloudSnow size={48} className="opacity-90" />;
@@ -114,6 +118,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
   const { items, deleteItem, updateItem, isLoading } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDisease, setEditDisease] = useState("");
   const [editCrop, setEditCrop] = useState("");
@@ -156,20 +161,23 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
     healthy: items.filter(i => i.severity === "low").length,
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (confirm(isHindi ? "क्या आप वाकई इसे हटाना चाहते हैं?" : "Are you sure you want to delete this?")) {
       deleteItem(id);
       toast.success(isHindi ? "हटाया गया" : "Analysis deleted");
     }
   };
 
-  const startEdit = (item: LibraryItem) => {
+  const startEdit = (item: LibraryItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setEditingId(item.id);
     setEditDisease(isHindi ? item.diseaseNameHi : item.diseaseName);
     setEditCrop(isHindi ? item.cropTypeHi : item.cropType);
   };
 
-  const saveEdit = (id: string) => {
+  const saveEdit = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (isHindi) {
       updateItem(id, { diseaseNameHi: editDisease, cropTypeHi: editCrop });
     } else {
@@ -193,6 +201,10 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
   const humidity = weatherData?.current?.relative_humidity_2m ?? null;
   const weatherCode = weatherData?.current?.weather_code ?? 2;
   const weatherLabel = getWeatherLabel(weatherCode, isHindi);
+
+  // Day/Night logic matching Index.tsx / WeatherDashboard.tsx
+  const currentHour = new Date().getHours();
+  const isNight = currentHour >= 18 || currentHour < 6;
 
   return (
     <div className="flex flex-col flex-1 bg-muted pb-28 animate-fade-in">
@@ -227,7 +239,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
             <div className="flex flex-col items-end gap-2">
               {!isWeatherLoading && weatherData ? (
                 <>
-                  <WeatherIcon code={weatherCode} />
+                  <WeatherIcon code={weatherCode} isNight={isNight} />
                   <div className="flex items-center gap-1 text-subhead opacity-80">
                     <Droplets size={16} />
                     <span>{humidity ?? '--'}%</span>
@@ -323,6 +335,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
               <div
                 key={analysis.id}
                 className="group relative h-full"
+                onClick={() => setSelectedItem(analysis)}
               >
                 <div className="flex flex-col h-full bg-card rounded-3xl border border-border shadow-apple-sm overflow-hidden hover:shadow-apple transition-all duration-300">
                   {/* Thumbnail with 4:3 aspect ratio */}
@@ -336,9 +349,9 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                     <div className={cn(
                       "absolute top-3 right-3 px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5",
                       "glass",
-                      analysis.severity === "high" ? "text-destructive" : "text-primary"
+                      analysis.diseaseName.toLowerCase().includes('healthy') ? "text-primary" : "text-destructive"
                     )}>
-                      {analysis.severity === "high" ? (isHindi ? "समस्या" : "Issue") : (isHindi ? "स्वस्थ" : "Healthy")}
+                      {analysis.diseaseName.toLowerCase().includes('healthy') ? (isHindi ? "स्वस्थ" : "Healthy") : (isHindi ? "समस्या" : "Issue")}
                     </div>
                   </div>
 
@@ -348,7 +361,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                       <div className="flex items-center gap-1.5">
                         <span className={cn(
                           "w-1.5 h-1.5 rounded-full",
-                          analysis.severity === "high" ? "bg-destructive animate-pulse" : "bg-primary"
+                          analysis.diseaseName.toLowerCase() === 'healthy' ? "bg-primary" : "bg-destructive animate-pulse"
                         )} />
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                           {isHindi ? analysis.cropTypeHi : analysis.cropType} • {formatTime(analysis.timestamp)}
@@ -356,13 +369,13 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => startEdit(analysis)}
+                          onClick={(e) => startEdit(analysis, e)}
                           className="p-1 hover:text-primary transition-colors text-muted-foreground/40"
                         >
                           <Edit2 size={12} />
                         </button>
                         <button
-                          onClick={() => handleDelete(analysis.id)}
+                          onClick={(e) => handleDelete(analysis.id, e)}
                           className="p-1 hover:text-destructive transition-colors text-muted-foreground/40"
                         >
                           <Trash2 size={12} />
@@ -371,32 +384,30 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                     </div>
 
                     {editingId === analysis.id ? (
-                      <div className="flex flex-col gap-2 mb-2">
+                      <div className="flex flex-col gap-2 mb-2 bg-muted/30 p-2 rounded-lg border border-primary/20" onClick={(e) => e.stopPropagation()}>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase">{isHindi ? "फसल" : "Crop"}</label>
                           <input
                             value={editCrop}
                             onChange={(e) => setEditCrop(e.target.value)}
-                            className="w-full px-2 py-1 border rounded text-caption bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                            className="w-full px-2 py-1.5 border rounded-md text-caption bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
                             placeholder={isHindi ? "फसल का नाम" : "Crop Name"}
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase">{isHindi ? "रोग/स्थिति" : "Condition"}</label>
                           <input
                             value={editDisease}
                             onChange={(e) => setEditDisease(e.target.value)}
-                            className="w-full px-2 py-1 border rounded text-headline bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                            className="w-full px-2 py-1.5 border rounded-md text-headline bg-background font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
                             autoFocus
                             onKeyDown={(e) => e.key === 'Enter' && saveEdit(analysis.id)}
                             placeholder={isHindi ? "रोग का नाम" : "Disease Name"}
                           />
                         </div>
-                        <div className="flex gap-1 mt-1">
-                          <Button size="sm" className="h-7 text-[10px] px-2" onClick={() => saveEdit(analysis.id)}>
+                        <div className="flex gap-1.5 mt-1">
+                          <Button size="sm" className="flex-1 h-8 text-[10px] font-bold" onClick={(e) => saveEdit(analysis.id, e)}>
                             {isHindi ? "सहेजें" : "Save"}
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2" onClick={() => setEditingId(null)}>
+                          <Button size="sm" variant="ghost" className="flex-1 h-8 text-[10px]" onClick={(e) => { e.stopPropagation(); setEditingId(null); }}>
                             {isHindi ? "रद्द करें" : "Cancel"}
                           </Button>
                         </div>
@@ -426,7 +437,10 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
 
                     {/* Footer */}
                     <div className="flex items-center justify-between mt-3">
-                      <button className="flex items-center gap-1 text-subhead font-semibold text-primary hover:underline">
+                      <button
+                        onClick={() => setSelectedItem(analysis)}
+                        className="flex items-center gap-1 text-subhead font-semibold text-primary hover:underline"
+                      >
                         {t.viewDetails}
                         <ChevronRight size={16} />
                       </button>
@@ -439,6 +453,88 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
         )}
 
       </div>
+
+      {/* Detail Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-[110] bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="p-4 flex items-center justify-between border-b bg-background/80 backdrop-blur-md sticky top-0 z-20">
+            <Button variant="ghost" size="icon" onClick={() => setSelectedItem(null)} className="rounded-full">
+              <X className="w-6 h-6" />
+            </Button>
+            <div className="text-center">
+              <h2 className="text-headline font-bold text-foreground">Analysis Details</h2>
+              <p className="text-caption text-muted-foreground">{isHindi ? selectedItem.cropTypeHi : selectedItem.cropType}</p>
+            </div>
+            <div className="w-10" /> {/* Spacer */}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-20">
+            <div className="relative w-full aspect-video rounded-apple-xl overflow-hidden border-2 border-primary shadow-green">
+              <img src={selectedItem.thumbnail} className="w-full h-full object-cover" alt="Scan" />
+              <div className="absolute top-3 right-3 glass px-3 py-1 rounded-full text-[11px] font-bold text-primary">
+                {selectedItem.confidence}% Confidence
+              </div>
+            </div>
+
+            <div className={cn(
+              "p-4 rounded-apple-lg flex items-center gap-3",
+              selectedItem.severity === "low" ? "bg-green-wash border border-primary/20" : "bg-destructive/10 border border-destructive/20"
+            )}>
+              {selectedItem.severity === "low" ? <CheckCircle className="text-primary" /> : <AlertCircle className="text-destructive" />}
+              <div>
+                <p className={cn("text-headline font-bold", selectedItem.severity === "low" ? "text-primary" : "text-destructive")}>
+                  {isHindi ? selectedItem.diseaseNameHi : selectedItem.diseaseName}
+                </p>
+                <p className="text-caption text-muted-foreground uppercase tracking-widest">{selectedItem.severity} Severity</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-body text-muted-foreground leading-relaxed">
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Description</p>
+                <p className="bg-muted/30 p-4 rounded-apple-lg border border-border">
+                  {isHindi ? selectedItem.descriptionHi || selectedItem.summaryHi : selectedItem.description || selectedItem.summary}
+                </p>
+              </div>
+
+              {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms) && (isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Symptoms</p>
+                  <div className="space-y-2">
+                    {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.map((s, i) => (
+                      <div key={i} className="flex gap-3 items-start bg-card p-3 rounded-apple border border-border">
+                        <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0 mt-0.5">{i + 1}</span>
+                        <p className="text-subhead">{s}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment) && (isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Treatment Plan</p>
+                  <div className="bg-slate-900 p-5 rounded-apple-xl space-y-4">
+                    {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.map((t, i) => (
+                      <div key={i} className="flex gap-3">
+                        <span className="text-primary font-black mt-1">✓</span>
+                        <p className="text-slate-200 text-subhead">{t}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button
+              className="w-full h-14 rounded-apple-lg bg-primary text-white font-bold"
+              onClick={() => setSelectedItem(null)}
+            >
+              Close Details
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

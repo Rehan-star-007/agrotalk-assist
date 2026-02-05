@@ -13,9 +13,10 @@ interface ImageAnalysisProps {
   isOpen: boolean;
   onClose: () => void;
   language: string;
+  onShareChat?: (analysis: DiseaseAnalysis) => void;
 }
 
-export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps) {
+export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageAnalysisProps) {
   const [state, setState] = useState<AnalysisState>("camera");
   const [analysisMode, setAnalysisMode] = useState<"yolo" | "nvidia">("yolo");
   const [analysisStep, setAnalysisStep] = useState<"crop" | "disease">("crop");
@@ -35,7 +36,14 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
   const t = getTranslation('image', language);
   const tCommon = getTranslation('common', language);
-  const isLocalized = language !== "en";
+
+  const handleShareToChat = () => {
+    if (analysisResult && onShareChat) {
+      onShareChat(analysisResult);
+      onClose();
+      toast.success(language === "hi" ? "चैट बॉक्स में भेज दिया गया!" : "Sent to chat!");
+    }
+  };
 
   // Helper to get localized content from the AI result
   const getContent = (enField: keyof DiseaseAnalysis, localizedField?: string) => {
@@ -627,7 +635,11 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">
-                  <Button variant="outline" className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]"
+                    onClick={handleShareToChat}
+                  >
                     <Share2 size={18} />
                     {tCommon.share}
                   </Button>

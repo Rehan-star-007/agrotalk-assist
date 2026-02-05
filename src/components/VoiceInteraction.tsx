@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Play, Pause, RotateCcw, ArrowUp } from "lucide-react";
+import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Play, Pause, RotateCcw, ArrowRight, ChevronDown, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { Button } from "./ui/button";
@@ -58,6 +58,16 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
+  const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("agrovoice_voice") || "mia");
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  const voiceMenuRef = useRef<HTMLDivElement>(null);
+
+  // Available NVIDIA voices
+  const voiceOptions = [
+    { id: "mia", name: "Mia", label: language === 'hi' ? 'मिया (महिला)' : 'Mia (Female)' },
+    { id: "aria", name: "Aria", label: language === 'hi' ? 'आरिया (महिला)' : 'Aria (Female)' },
+    { id: "sofia", name: "Sofia", label: language === 'hi' ? 'सोफिया (महिला)' : 'Sofia (Female)' },
+  ];
 
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && conversationHistory.length === 0) {
@@ -77,6 +87,18 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       console.log(`💬 Starting new chat session: ${newId}`);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (voiceMenuRef.current && !voiceMenuRef.current.contains(event.target as Node)) {
+        setShowVoiceMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("agrovoice_muted", String(isMuted));
@@ -150,7 +172,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     setState("processing");
 
     try {
-      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId);
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId, selectedVoice);
 
       if (result.success && result.advisory) {
         setTranscript(result.transcript || text);
@@ -534,6 +556,59 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
           {/* Header text and icon removed per user request */}
         </div>
 
+        {/* Voice Model Selector */}
+        <div className="relative" ref={voiceMenuRef}>
+          <button
+            onClick={() => setShowVoiceMenu(!showVoiceMenu)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 h-10 rounded-xl border shadow-sm transition-all active:scale-95",
+              showVoiceMenu
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-white/80 border-border/50 hover:bg-muted hover:border-primary/30"
+            )}
+          >
+            <Volume2 size={14} className={showVoiceMenu ? "text-primary" : "text-primary"} />
+            <span className={cn("text-xs font-medium capitalize", showVoiceMenu ? "text-primary" : "text-foreground")}>
+              {selectedVoice}
+            </span>
+            <ChevronDown size={14} className={cn("text-muted-foreground transition-transform duration-200", showVoiceMenu && "rotate-180 text-primary")} />
+          </button>
+
+          {showVoiceMenu && (
+            <div className="absolute right-0 top-full mt-2 z-50 w-48 bg-white rounded-xl border border-border/50 shadow-xl py-1 animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-3 py-2 border-b border-border/30 bg-muted/30">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                  {language === 'hi' ? 'आवाज़ चुनें' : 'Select Voice'}
+                </span>
+              </div>
+              <div className="p-1">
+                {voiceOptions.map((voice) => (
+                  <button
+                    key={voice.id}
+                    onClick={() => {
+                      setSelectedVoice(voice.id);
+                      localStorage.setItem("agrovoice_voice", voice.id);
+                      setShowVoiceMenu(false);
+                    }}
+                    className={cn(
+                      "w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 rounded-lg transition-colors",
+                      selectedVoice === voice.id
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-foreground/80 hover:bg-muted"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-2 h-2 rounded-full ring-2 ring-offset-1",
+                      selectedVoice === voice.id ? "bg-primary ring-primary/30" : "bg-border ring-transparent"
+                    )} />
+                    {voice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={() => setIsMuted(!isMuted)}
           className={cn(
@@ -736,15 +811,20 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       </ScrollArea>
 
       {/* Premium Input Area */}
-      <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-4 pb-6">
+      <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-3 pb-4">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-3">
-            <MicrophoneButton
-              isRecording={state === "recording"}
-              isProcessing={state === "processing"}
+            <button
               onClick={handleMicClick}
-              size="small"
-            />
+              className={cn(
+                "w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95",
+                state === "recording"
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-primary text-white shadow-green"
+              )}
+            >
+              <Mic size={24} />
+            </button>
 
             <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
               <div className="relative flex-1">
@@ -754,11 +834,11 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                   onChange={(e) => setTextInput(e.target.value)}
                   placeholder={getPlaceholderText()}
                   className={cn(
-                    "w-full h-12 pl-5 pr-12 rounded-full",
-                    "bg-white border-2 border-border/50",
+                    "w-full h-14 pl-5 pr-14 rounded-full",
+                    "bg-white border-2 border-border",
                     "text-body placeholder:text-muted-foreground/60",
                     "focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10",
-                    "transition-all duration-200 shadow-sm",
+                    "transition-all duration-200 shadow-apple-sm",
                     "disabled:opacity-50 disabled:cursor-not-allowed"
                   )}
                   disabled={state === "recording" || state === "processing"}
@@ -769,17 +849,16 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                     type="submit"
                     disabled={!textInput.trim() || state === "recording" || state === "processing"}
                     className={cn(
-                      "absolute right-1.5 top-1/2 -translate-y-1/2",
-                      "w-9 h-9 rounded-full",
-                      "bg-primary text-primary-foreground",
+                      "absolute right-2 top-1/2 -translate-y-1/2",
+                      "w-10 h-10 rounded-full",
+                      "bg-[#76b900] text-white",
                       "flex items-center justify-center",
-                      "shadow-md shadow-primary/20",
-                      "hover:bg-primary/90 hover:scale-105",
+                      "hover:bg-[#5da600]",
                       "active:scale-95 transition-all duration-200",
-                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
                   >
-                    <ArrowUp size={18} strokeWidth={2.5} />
+                    <ArrowRight size={20} strokeWidth={2.5} />
                   </button>
                 )}
               </div>
