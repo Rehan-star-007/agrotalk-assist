@@ -11,6 +11,7 @@ const multer = require('multer');
 const transcriptionService = require('../services/transcriptionService');
 const inferenceService = require('../services/inferenceService');
 const { generateSpeech } = require('../services/openRouterService');
+const { generateNvidiaSpeech } = require('../services/nvidiaTtsService');
 
 const router = express.Router();
 
@@ -88,8 +89,19 @@ router.post('/', uploadFields, async (req, res) => {
         const useTts = req.body.useTts === 'true';
 
         if (useTts) {
-            console.log('🔊 Generating natural TTS audio via local backend...');
-            const audioBuffer = await generateSpeech(advisory.recommendation, language);
+            let audioBuffer = null;
+
+            // 1. Try NVIDIA TTS (New)
+            if (process.env.NVIDIA_API_KEY) {
+                console.log('🔊 Attempting NVIDIA TTS...');
+                audioBuffer = await generateNvidiaSpeech(advisory.recommendation, language);
+            }
+
+            // 2. Fallback to existing TTS service (Python/Edge-TTS)
+            if (!audioBuffer) {
+                console.log('🔊 Using default TTS service...');
+                audioBuffer = await generateSpeech(advisory.recommendation, language);
+            }
             if (audioBuffer) {
                 audioBase64 = audioBuffer.toString('base64');
             }

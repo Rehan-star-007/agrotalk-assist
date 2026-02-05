@@ -3,7 +3,7 @@ import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Pl
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { Button } from "./ui/button";
-import { transcribeAndGetAdvice, getTextAdvice, ConversationMessage } from "@/lib/apiClient";
+import { transcribeAndGetAdvice, getTextAdvice, ConversationMessage, getNvidiaTts } from "@/lib/apiClient";
 import type { AgriculturalAdvisory } from "@/lib/apiClient";
 import { getTranslation } from "@/lib/translations";
 import { ScrollArea } from "./ui/scroll-area";
@@ -103,7 +103,6 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   useEffect(() => {
     localStorage.setItem("agrovoice_muted", String(isMuted));
     if (isMuted) {
-      window.speechSynthesis?.cancel();
       if (ttsAudio) {
         ttsAudio.pause();
         ttsAudio.currentTime = 0;
@@ -402,77 +401,61 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       .trim();
   };
 
-  // Enhanced TTS with all 5 language support
-  const speakText = (text: string, messageId?: string) => {
-    if (isMuted) return;
+  // Enhanced TTS with NVIDIA Cloud Backend
+  const speakText = async (text: string, messageId?: string, force: boolean = false) => {
+    if (isMuted && !force) return;
+
+    // If forcing (e.g. manual play click), unmute automatically
+    if (force && isMuted) {
+      setIsMuted(false);
+    }
 
     // Stop any current playback
-    window.speechSynthesis?.cancel();
     if (ttsAudio) {
       ttsAudio.pause();
       ttsAudio.currentTime = 0;
     }
 
-    if ("speechSynthesis" in window) {
-      const cleanedText = cleanMarkdown(text);
-      const utterance = new SpeechSynthesisUtterance(cleanedText);
-
-      // All 5 supported languages
-      const langMap: Record<string, string> = {
-        'en': 'en-IN',
-        'hi': 'hi-IN',
-        'ta': 'ta-IN',
-        'te': 'te-IN',
-        'mr': 'mr-IN',
-      };
-
-      const targetLang = langMap[language] || 'en-IN';
-      utterance.lang = targetLang;
-
-      // Get best voice for the language
-      const voices = window.speechSynthesis.getVoices();
-      const langCode = targetLang.split('-')[0];
-
-      const bestVoice = voices.find(v => {
-        const vLang = v.lang.replace('_', '-').toLowerCase();
-        return vLang.startsWith(langCode) &&
-          (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural'));
-      }) || voices.find(v => {
-        const vLang = v.lang.replace('_', '-').toLowerCase();
-        return vLang.startsWith(langCode);
-      }) || voices.find(v => {
-        const vLang = v.lang.replace('_', '-').toLowerCase();
-        return vLang.includes(langCode);
-      });
-
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-        console.log(`🎙️ TTS: ${bestVoice.name} for ${language}`);
-      } else {
-        console.log(`⚠️ No voice for ${language}, using default`);
-      }
-
-      utterance.pitch = 1.0;
-      utterance.rate = 1.0;
-
-      utterance.onstart = () => {
-        setIsPlaying(true);
-        if (messageId) setCurrentPlayingId(messageId);
-      };
-
-      utterance.onend = () => {
-        setIsPlaying(false);
-        setCurrentPlayingId(null);
-      };
-
-      utterance.onerror = () => {
-        setIsPlaying(false);
-        setCurrentPlayingId(null);
-      };
-
+    try {
       setIsPlaying(true);
       if (messageId) setCurrentPlayingId(messageId);
-      window.speechSynthesis.speak(utterance);
+
+      const cleanedText = cleanMarkdown(text);
+      const audioBlob = await getNvidiaTts(cleanedText, language);
+
+      if (!audioBlob) {
+        console.warn("⚠️ NVIDIA TTS failed, no fallback enabled as per request.");
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+        return;
+      }
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = () => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      setTtsAudio(audio);
+      audio.play().catch(e => {
+        console.error("Playback error:", e);
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+      });
+
+    } catch (error) {
+      console.error("TTS Error:", error);
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
     }
   };
 
@@ -489,12 +472,16 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
         setCurrentPlayingId(null);
       };
       audio.onerror = () => {
-        console.warn('TTS audio failed, falling back to browser speech');
-        speakText(text);
+        console.warn('TTS audio failed');
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
       };
       setTtsAudio(audio);
       setIsPlaying(true);
-      audio.play().catch(() => speakText(text));
+      audio.play().catch(() => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+      });
     } else {
       speakText(text);
     }
@@ -502,7 +489,6 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
 
   const handlePlayMessage = (msgId: string, content: string) => {
     if (currentPlayingId === msgId && isPlaying) {
-      window.speechSynthesis?.cancel();
       if (ttsAudio) {
         ttsAudio.pause();
         ttsAudio.currentTime = 0;
@@ -510,7 +496,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       setIsPlaying(false);
       setCurrentPlayingId(null);
     } else {
-      speakText(content, msgId);
+      speakText(content, msgId, true);
     }
   };
 

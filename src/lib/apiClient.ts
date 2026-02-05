@@ -251,6 +251,28 @@ export async function getTextAdvice(
 }
 
 /**
+ * Get natural TTS audio from NVIDIA cloud
+ * Returns a Blob containing the MP3 audio
+ */
+export async function getNvidiaTts(text: string, language: string = 'en'): Promise<Blob | null> {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/tts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text, language })
+        });
+
+        if (!response.ok) return null;
+        return await response.blob();
+    } catch (error) {
+        console.error('❌ NVIDIA TTS Fetch failed:', error);
+        return null;
+    }
+}
+
+/**
  * Check if backend is available
  */
 export async function checkBackendHealth(): Promise<boolean> {
