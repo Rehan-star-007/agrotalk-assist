@@ -35,7 +35,7 @@ export function LanguageSelector({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-full",
-          "bg-card border border-border card-shadow",
+          "bg-card border border-border shadow-apple-sm",
           "hover:bg-muted transition-colors",
           "focus:outline-none focus:ring-2 focus:ring-primary/30",
           "min-h-touch"
@@ -54,9 +54,9 @@ export function LanguageSelector({
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          
+
           {/* Dropdown */}
-          <div className="absolute right-0 top-full mt-2 z-50 w-56 bg-card rounded-xl border border-border card-shadow animate-scale-in">
+          <div className="absolute right-0 top-full mt-2 z-50 w-56 bg-card rounded-xl border border-border shadow-apple-lg animate-scale-in">
             <div className="p-2">
               {languages.map((lang) => (
                 <button

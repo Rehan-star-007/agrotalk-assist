@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, Camera, Upload, Volume2, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2 } from "lucide-react";
+import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
@@ -22,8 +22,10 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   const [analysisResult, setAnalysisResult] = useState<DiseaseAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isSaved, setIsSaved] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
   const { addItem } = useLibrary();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const t = getTranslation('image', language);
   const tCommon = getTranslation('common', language);
@@ -85,11 +87,11 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
         treatment: visionResult.analysis.treatment_steps,
         treatmentHi: visionResult.analysis.treatment_steps_hindi,
       };
-      const { item: savedItem, isDuplicate } = addItem(newItem);
+      const { item: savedItem, isDuplicate } = await addItem(newItem);
       setIsSaved(true);
       if (isDuplicate) {
         toast.info(isHindi ? "इतिहास में पहले से मौजूद, समय अपडेट किया गया" : "Already in history, time updated");
-      } else {
+      } else if (savedItem) {
         toast.success(isHindi ? "इतिहास में सहेजा गया" : "Saved to history");
       }
 
@@ -109,6 +111,10 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   };
 
   const speakAdvice = () => {
+    if (isMuted) {
+      toast.info(isHindi ? "आवाज बंद है। सुनने के लिए अनम्यूट करें।" : "Audio is muted. Unmute to hear advice.");
+      return;
+    }
     if (analysisResult && "speechSynthesis" in window) {
       const name = isHindi ? analysisResult.disease_name_hindi : analysisResult.disease_name;
       const desc = isHindi ? analysisResult.description_hindi : analysisResult.description;
@@ -140,9 +146,21 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
           <h1 className="text-headline font-bold text-foreground">{t.title}</h1>
           <p className="text-caption text-muted-foreground">{t.subtitle}</p>
         </div>
-        <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-green-wash">
-          <Sparkles className="w-5 h-5 text-primary" />
-        </div>
+        <button
+          onClick={() => {
+            const newState = !isMuted;
+            setIsMuted(newState);
+            localStorage.setItem("agrovoice_muted", String(newState));
+            if (newState) window.speechSynthesis?.cancel();
+          }}
+          className={cn(
+            "w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95",
+            isMuted ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border hover:bg-muted text-primary"
+          )}
+          title={isMuted ? "Unmute AI" : "Mute AI"}
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
       </header>
 
       {/* Scrollable Content */}
@@ -151,7 +169,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
         {state === "camera" && (
           <div className="flex flex-col items-center justify-center p-6 min-h-[60vh] animate-fade-in">
             {/* Upload Area */}
-            <div 
+            <div
               className="relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed border-primary bg-background flex flex-col items-center justify-center p-8 hover:bg-green-wash hover:border-primary/70 transition-all cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -168,7 +186,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
             <div className="w-full max-w-sm mt-8 space-y-3">
               <Button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => cameraInputRef.current?.click()}
                 className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
               >
                 <Camera className="mr-2 h-5 w-5" /> {t.takePhoto}
@@ -181,6 +199,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                 <Upload className="mr-2 h-5 w-5 text-primary" /> {t.uploadPhoto}
               </Button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelect} className="hidden" />
             </div>
           </div>
         )}
@@ -376,7 +395,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                     <Share2 size={18} />
                     {tCommon.share}
                   </Button>
-                  <Button 
+                  <Button
                     onClick={resetAnalysis}
                     className="flex-1 h-12 rounded-apple bg-primary hover:bg-primary/90 gap-2 active:scale-[0.98]"
                   >

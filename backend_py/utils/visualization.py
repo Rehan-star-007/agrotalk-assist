@@ -1,116 +1,109 @@
+"""
+Visualization utilities for disease analysis results.
+Now uses actual detected disease regions instead of generic color detection.
+"""
 import cv2
 import numpy as np
-import base64
 from PIL import Image
 import io
+import base64
 
-def draw_disease_boxes(image: Image.Image, disease_name: str, confidence: float, is_healthy: bool = False) -> str:
+
+def draw_disease_regions(image: Image.Image, analysis: dict) -> Image.Image:
     """
-    Draws YOLO-style bounding boxes around detected disease spots.
-    Uses robust OpenCV heuristics to ensure visual marks are visible.
+    Draw precise bounding boxes around detected disease regions.
+    
+    Args:
+        image: Original PIL Image
+        analysis: Detection result containing 'disease_regions' list
+        
+    Returns:
+        PIL Image with disease regions marked
     """
-    try:
-        # 1. Convert PIL to BGR for OpenCV
-        # Use proper error handling for different PIL modes
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+    img_np = np.array(image.convert("RGB"))
+    img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+    height, width = img_bgr.shape[:2]
+    
+    disease_regions = analysis.get("disease_regions", [])
+    is_healthy = analysis.get("is_healthy", False)
+    severity = analysis.get("severity", "medium")
+    
+    # Color scheme based on severity
+    if is_healthy:
+        box_color = (46, 204, 113)  # Green - healthy
+    elif severity == "high":
+        box_color = (52, 73, 235)   # Red (BGR) - severe
+    elif severity == "medium":
+        box_color = (0, 165, 255)   # Orange (BGR) - medium
+    else:
+        box_color = (0, 200, 255)   # Yellow (BGR) - low
+    
+    # Draw boxes around detected disease regions
+    for i, region in enumerate(disease_regions):
+        x, y, w, h = region["x"], region["y"], region["w"], region["h"]
+        conf = region.get("confidence", 75)
         
-        img_np = np.array(image)
-        img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        height, width = img_bgr.shape[:2]
-        output_img = img_bgr.copy()
+        # Draw rectangle with thickness based on severity
+        thickness = 3 if severity == "high" else 2
+        cv2.rectangle(img_bgr, (x, y), (x + w, y + h), box_color, thickness)
         
-        # is_healthy is now passed from the detector
+        # Add label
+        label = f"#{i+1} ({conf:.0f}%)"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        (label_w, label_h), _ = cv2.getTextSize(label, font, font_scale, 1)
         
-        # Color configuration (YOLO style)
-        box_color = (0, 0, 255) # BGR Red
-        if is_healthy:
-            box_color = (0, 255, 0) # BGR Green
-            
-        # 2. Advanced Saliency / Spot Detection
-        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        # Background for label
+        label_y = max(y - 5, label_h + 5)
+        cv2.rectangle(img_bgr, (x, label_y - label_h - 4), (x + label_w + 4, label_y + 2), box_color, -1)
+        cv2.putText(img_bgr, label, (x + 2, label_y - 2), font, font_scale, (255, 255, 255), 1)
+    
+    # If healthy, add a single "Healthy" badge at top
+    if is_healthy:
+        badge_text = "HEALTHY"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (badge_w, badge_h), _ = cv2.getTextSize(badge_text, font, 0.8, 2)
+        badge_x = (width - badge_w) // 2
+        badge_y = 40
+        cv2.rectangle(img_bgr, (badge_x - 10, badge_y - badge_h - 10), (badge_x + badge_w + 10, badge_y + 10), (46, 204, 113), -1)
+        cv2.putText(img_bgr, badge_text, (badge_x, badge_y), font, 0.8, (255, 255, 255), 2)
+    
+    # If no disease regions detected but not healthy, show subtle border indicator
+    if not is_healthy and not disease_regions:
+        # Draw a subtle border instead of scan lines
+        border_thickness = 4
+        cv2.rectangle(img_bgr, (border_thickness, border_thickness), 
+                     (width - border_thickness, height - border_thickness), 
+                     box_color, border_thickness)
         
-        # Ranges for "unhealthy" colors (browns, yellows)
-        lower_brown = np.array([10, 40, 20])
-        upper_brown = np.array([40, 255, 220])
-        mask_brown = cv2.inRange(hsv, lower_brown, upper_brown)
-        
-        # High contrast spots
-        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5,5), 0)
-        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                     cv2.THRESH_BINARY_INV, 15, 5)
-        
-        # Focus on "on-leaf" area (mask out the potentially dark background)
-        _, leaf_mask = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        final_mask = cv2.bitwise_and(thresh, leaf_mask)
-        final_mask = cv2.bitwise_or(final_mask, mask_brown)
-        final_mask = cv2.bitwise_and(final_mask, leaf_mask)
-        
-        # Morphological clean up
-        kernel = np.ones((3,3), np.uint8)
-        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_OPEN, kernel)
-        
-        # Find contours
-        contours, _ = cv2.findContours(final_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        boxes = []
-        min_area = (width * height) * 0.003 
-        max_area = (width * height) * 0.8   
-        
-        if not is_healthy:
-            # Sort spots by area and take top ones
-            sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)
-            for cnt in sorted_contours:
-                area = cv2.contourArea(cnt)
-                if min_area < area < max_area:
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    
-                    # Prevent boxes from being too weird/thin
-                    if 0.1 < (w/h) < 10:
-                        boxes.append((x, y, w, h))
-                    if len(boxes) >= 5: break
-            
-            # Fallback if no spots
-            if not boxes:
-                pad = max(20, int(min(width, height) * 0.2))
-                boxes.append((pad, pad, width - 2*pad, height - 2*pad))
-        else:
-            # Healthy: One large Green box around center
-            pad = max(30, int(min(width, height) * 0.15))
-            boxes.append((pad, pad, width - 2*pad, height - 2*pad))
+        # Add analysis indicator badge at bottom
+        text = "SYMPTOMS DETECTED"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (text_w, text_h), _ = cv2.getTextSize(text, font, 0.6, 2)
+        text_x = (width - text_w) // 2
+        text_y = height - 20
+        cv2.rectangle(img_bgr, (text_x - 8, text_y - text_h - 6), (text_x + text_w + 8, text_y + 6), box_color, -1)
+        cv2.putText(img_bgr, text, (text_x, text_y), font, 0.6, (255, 255, 255), 2)
+    
+    # Convert back to RGB
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(img_rgb)
 
-        # 3. DRAW BOXES (YOLO STYLE)
-        for i, (x, y, w, h) in enumerate(boxes):
-            label_text = f"{disease_name} {confidence}%" if i == 0 else "SPOT"
-            if is_healthy: label_text = "HEALTHY"
-            
-            # Scale label based on image size
-            scale = max(0.4, min(1.2, width / 600))
-            thickness = max(1, int(width / 400))
-            
-            cv2.rectangle(output_img, (x, y), (x + w, y + h), box_color, thickness + 1)
-            
-            font = cv2.FONT_HERSHEY_DUPLEX
-            (tw, th), bl = cv2.getTextSize(label_text, font, scale, thickness)
-            
-            # Label background
-            cv2.rectangle(output_img, (x, y - th - 10), (x + tw + 10, y), box_color, -1)
-            cv2.putText(output_img, label_text, (x + 5, y - 5), font, scale, (255, 255, 255), thickness)
 
-        # 4. Convert back to Base64
-        _, buffer = cv2.imencode('.jpg', output_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        base64_str = base64.b64encode(buffer).decode('utf-8')
-        return f"data:image/jpeg;base64,{base64_str}"
+def image_to_base64(image: Image.Image, format: str = "PNG") -> str:
+    """Convert PIL Image to base64 string."""
+    buffer = io.BytesIO()
+    image.save(buffer, format=format)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    except Exception as e:
-        print(f"FAILED TO DRAW BOXES: {e}")
-        # Always return something so the frontend doesn't break
-        try:
-            # Return original image if possible
-            buffered = io.BytesIO()
-            image.save(buffered, format="JPEG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-            return f"data:image/jpeg;base64,{img_str}"
-        except:
-            return ""
+
+def process_and_visualize(image: Image.Image, analysis: dict) -> tuple:
+    """
+    Main entry point: visualize detection results on image.
+    
+    Returns:
+        (processed_image, base64_string)
+    """
+    processed = draw_disease_regions(image, analysis)
+    b64 = image_to_base64(processed)
+    return processed, b64

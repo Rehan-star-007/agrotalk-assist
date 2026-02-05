@@ -11,7 +11,12 @@ from pydantic import BaseModel
 
 from models.yolo_detector import PlantDiseaseDetector
 from utils.image_processing import decode_base64_image, preprocess_image
-from utils.visualization import draw_disease_boxes
+from utils.visualization import process_and_visualize
+from services.tts_service import TTSService
+import io
+import base64
+import io
+import base64
 
 app = FastAPI(
     title="AgroVoice Disease Detection API",
@@ -34,6 +39,11 @@ class AnalyzeRequest(BaseModel):
     cropType: Optional[str] = None
     language: Optional[str] = "en"
 
+class TTSRequest(BaseModel):
+    text: str
+    language: Optional[str] = "en"
+    gender: Optional[str] = "male"
+
 class AnalyzeResponse(BaseModel):
     success: bool
     analysis: dict
@@ -47,6 +57,9 @@ async def startup_event():
     print("📦 Loading YOLO model...")
     model_path = os.environ.get("MODEL_PATH", None)
     detector = PlantDiseaseDetector(model_path=model_path)
+    # Initialize TTS Service
+    global tts_service
+    tts_service = TTSService()
     print("✅ Server ready!")
 
 @app.get("/")
@@ -95,18 +108,15 @@ async def analyze_image(request: AnalyzeRequest):
         # 3. Generate Visualizations (Softly fail if this parts crashes)
         processed_image_b64 = None
         try:
-            print("🎨 [ANALYZE] Generating visual markers (OpenCV)...")
+            print("🎨 [ANALYZE] Drawing disease regions...")
             display_image = original_image.copy()
             # Ensure manageable size for display
             if display_image.width > 800 or display_image.height > 800:
                 display_image.thumbnail((800, 800))
-                
-            processed_image_b64 = draw_disease_boxes(
-                display_image, 
-                result.get("disease_name", "Unknown"), 
-                result.get("confidence", 0),
-                is_healthy=result.get("is_healthy", False)
-            )
+            
+            # Use new visualization with precise disease regions    
+            _, processed_b64 = process_and_visualize(display_image, result)
+            processed_image_b64 = "data:image/png;base64," + processed_b64
         except Exception as ve:
             print(f"⚠️ [ANALYZE] Visualization failed (soft fail): {ve}")
             # Fallback to original image if visualization failed
@@ -130,6 +140,28 @@ async def analyze_image(request: AnalyzeRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/api/tts")
+async def generate_speech(request: TTSRequest):
+    global tts_service
+    if tts_service is None:
+        raise HTTPException(status_code=503, detail="TTS service not initialized")
+    
+    try:
+        audio_bytes = await tts_service.generate_audio(request.text, request.language, request.gender)
+        if not audio_bytes:
+             raise HTTPException(status_code=500, detail="TTS generation failed")
+             
+        # Convert to base64
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        return {
+            "success": True,
+            "audio": audio_base64,
+            "content_type": "audio/mp3"
+        }
+    except Exception as e:
+        print(f"❌ [TTS] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { getAgriAdvice } = require('./openRouterService');
+const { getAgriAdvice, generateSpeech } = require('./openRouterService');
 
 // Load Knowledge Base
-let knowledgeBase = { crops: {}, topics: {} };
+let knowledgeBase = { crops: {}, topics: {}, general: {} };
 try {
     const kbPath = path.join(__dirname, '../data/agricultural_knowledge.json');
     if (fs.existsSync(kbPath)) {
@@ -47,30 +47,40 @@ const CONDITION_PATTERNS = [
     }
 ];
 
-const VOICE_FALLBACK_ADVISORY = {
-    condition: 'General Advice',
-    confidence: 'Low',
-    recommendation: 'I understood your question but I don\'t have specific details for that crop yet. Generally, ensure proper drainage, balanced nitrogen/phosphorus/potassium (NPK) fertilization, and monitor for pests weekly.'
-};
+/**
+ * Fuzzy crop name matching
+ * Handles variations like "dragon fruit" vs "dragonfruit"
+ */
+function fuzzyMatchCrop(text) {
+    const normalized = (text || '').toLowerCase().replace(/[\s-_]/g, '');
+
+    for (const [cropKey, cropData] of Object.entries(knowledgeBase.crops || {})) {
+        // Check exact names
+        if (cropData.names && cropData.names.some(name => normalized.includes(name.toLowerCase().replace(/[\s-_]/g, '')))) {
+            return cropKey;
+        }
+        // Check crop key itself
+        if (normalized.includes(cropKey.replace(/[\s-_]/g, ''))) {
+            return cropKey;
+        }
+    }
+    return null;
+}
 
 /**
  * Identify the crop and the topic from the text.
  */
 function extractCropAndTopic(text) {
     const normalized = (text || '').toLowerCase();
-    let detectedCrop = null;
-    let detectedTopic = 'care'; // default
 
-    // Detect Crop
-    for (const [cropKey, cropData] of Object.entries(knowledgeBase.crops)) {
-        if (cropData.names.some(name => normalized.includes(name))) {
-            detectedCrop = cropKey;
-            break;
-        }
-    }
+    // Detect Crop with fuzzy matching
+    let detectedCrop = fuzzyMatchCrop(text);
+
+    // Default topic
+    let detectedTopic = 'care';
 
     // Detect Topic
-    for (const [topicKey, keywords] of Object.entries(knowledgeBase.topics)) {
+    for (const [topicKey, keywords] of Object.entries(knowledgeBase.topics || {})) {
         if (keywords.some(kw => normalized.includes(kw))) {
             detectedTopic = topicKey;
             break;
@@ -127,8 +137,9 @@ function inferAdvice(labels) {
 
 /**
  * Advanced Dynamic Inference from Text
+ * Now supports conversation history for context-aware responses
  */
-async function inferAdviceFromText(text, language = 'en', weatherContext = null) {
+async function inferAdviceFromText(text, language = 'en', weatherContext = null, conversationHistory = []) {
     const normalized = (text || '').trim();
     const normalizedLower = normalized.toLowerCase();
 
@@ -142,15 +153,60 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
 
     const lang = ['hi', 'ta', 'te', 'mr'].includes(language) ? language : 'en';
 
-    // 0. Weather-specific Knowledge Integration
-    const weatherKeywords = ['weather', 'temperature', 'hot', 'cold', 'rain', 'humidity', 'forecast', 'climate', 'मौसम', 'तापमान', 'बारिश', 'तापमान', 'गर्मी', 'ठंड', 'வானிலை', 'வெப்பநிலை', 'மழை'];
+    // 1. AI Assistant (Priority if History exists)
+    // If we have conversation history, we MUST use AI to maintain context.
+    // We removed the word count check to allow "Local Wisdom" (KB/Weather keys) to trigger for fresh queries.
+    if (process.env.OPENROUTER_API_KEY && conversationHistory && conversationHistory.length > 0) {
+        console.log(`🧠 Conversation History detected (${conversationHistory.length} items). Prioritizing AI.`);
+        try {
+            // We pass null for 'labels' as we are text-based here
+            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang, conversationHistory);
+            if (aiResponse) {
+                return {
+                    condition: 'AI Assistant (Conversational)',
+                    confidence: 'High',
+                    recommendation: aiResponse.text
+                };
+            }
+        } catch (e) {
+            console.error('❌ AI Priority Error:', e);
+            // Fallthrough to local logic on error
+        }
+    }
+
+    // 2. Precise Match from Knowledge Base (Crops)
+    // We check this BEFORE weather fallback so "Dragon fruit water" gets crop info, not just generic weather info.
+    const { crop, topic } = extractCropAndTopic(normalized);
+
+    if (crop && knowledgeBase.crops[crop]) {
+        const cropData = knowledgeBase.crops[crop];
+        let adviceText = cropData[topic] ? cropData[topic][lang] : null;
+
+        if (!adviceText && (topic !== 'care' && topic !== 'general')) {
+            adviceText = cropData['care'] ? cropData['care'][lang] : null;
+        }
+
+        if (adviceText) {
+            const cropTitle = crop.charAt(0).toUpperCase() + crop.slice(1);
+            const formattedAdvice = `**${cropTitle} - ${topic.charAt(0).toUpperCase() + topic.slice(1)}**\n\n${adviceText}`;
+            return {
+                condition: `Local Wisdom: ${cropTitle}`,
+                confidence: 'High',
+                recommendation: formattedAdvice
+            };
+        }
+    }
+
+    // 3. Weather-integrated local response (Generic Fallback)
+    // Only used if no history, no crop detected, and simple keywords found.
+    const weatherKeywords = ['weather', 'temperature', 'hot', 'cold', 'rain', 'humidity', 'forecast', 'climate', 'मौसम', 'तापमान', 'बारिश', 'गर्मी', 'ठंड', 'வானிலை', 'வெப்பநிலை', 'மழை'];
     const wateringKeywords = ['water', 'watering', 'irrigation', 'sinchai', 'pani', 'நீர்ப்பாசனம்', 'தண்ணீர்'];
 
     const isWeatherQuery = weatherKeywords.some(kw => normalizedLower.includes(kw));
     const isWateringQuery = wateringKeywords.some(kw => normalizedLower.includes(kw));
 
     if (weatherContext && (isWeatherQuery || isWateringQuery)) {
-        // Simple mapping for weather codes (Open-Meteo)
+        // ... (existing weather logic)
         const weatherLabels = {
             0: { en: 'Clear sky', hi: 'आसमान साफ है', ta: 'தெளிவான வானம்' },
             1: { en: 'Mainly clear', hi: 'मुख्य रूप से साफ', ta: 'பெரும்பாலும் தெளிவு' },
@@ -165,25 +221,25 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
 
         let recommendation = '';
         if (lang === 'ta') {
-            recommendation = `தற்போதைய வெப்பநிலை ${Math.round(weatherContext.temp)}°C மற்றும் ${weatherDesc}. ஈரப்பதம் ${weatherContext.humidity}% ஆகும். `;
+            recommendation = `**தற்போதைய வெப்பநிலை:** ${Math.round(weatherContext.temp)}°C\n**நிலை:** ${weatherDesc}\n**ஈரப்பதம்:** ${weatherContext.humidity}%\n\n`;
             if (isWateringQuery) {
                 recommendation += weatherContext.temp > 30
-                    ? "வெப்பம் அதிகமாக இருப்பதால், இன்று கூடுதல் நீர்ப்பாசனம் தேவைப்படலாம்."
-                    : "மண்ணின் ஈரப்பதத்தை சரிபார்த்து தேவைப்பட்டால் மட்டும் தண்ணீர் ஊற்றவும்.";
+                    ? "- வெப்பம் அதிகமாக இருப்பதால், இன்று **கூடுதல் நீர்ப்பாசனம்** தேவைப்படலாம்."
+                    : "- மண்ணின் ஈரப்பதத்தை சரிபார்த்து தேவைப்பட்டால் மட்டும் தண்ணீர் ஊற்றவும்.";
             }
         } else if (lang === 'hi') {
-            recommendation = `वर्तमान तापमान ${Math.round(weatherContext.temp)}°C है और ${weatherDesc} है। आर्द्रता ${weatherContext.humidity}% है। `;
+            recommendation = `**वर्तमान तापमान:** ${Math.round(weatherContext.temp)}°C\n**स्थिति:** ${weatherDesc}\n**आर्द्रता:** ${weatherContext.humidity}%\n\n`;
             if (isWateringQuery) {
                 recommendation += weatherContext.temp > 30
-                    ? "गर्मी के कारण आज अतिरिक्त सिंचाई की आवश्यकता हो सकती है।"
-                    : "सिंचाई से पहले मिट्टी की नमी की जांच कर लें।";
+                    ? "- गर्मी के कारण आज **अतिरिक्त सिंचाई** की सलाह है."
+                    : "- सिंचाई से पहले **मिट्टी की नमी** की जांच कर लें.";
             }
         } else {
-            recommendation = `The temperature is ${Math.round(weatherContext.temp)}°C with ${weatherDesc}. `;
+            recommendation = `**Current Temperature:** ${Math.round(weatherContext.temp)}°C\n**Condition:** ${weatherDesc}\n**Humidity:** ${weatherContext.humidity}%\n\n`;
             if (isWateringQuery) {
                 recommendation += weatherContext.temp > 30
-                    ? "It's quite hot, so your plants might need extra water today."
-                    : "Check soil moisture before watering; the current conditions are moderate.";
+                    ? "- It's quite hot, so your plants likely need **extra water** today.\n- Water in the **early morning** to reduce evaporation."
+                    : "- Check **soil moisture** before watering.\n- Current conditions are moderate.";
             }
         }
 
@@ -193,42 +249,8 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
             recommendation: recommendation
         };
     }
-    // 1. Check for General Agricultural Questions
-    if (knowledgeBase.general) {
-        const sortedConcepts = Object.keys(knowledgeBase.general).sort((a, b) => b.length - a.length);
-        for (const concept of sortedConcepts) {
-            if (normalizedLower.includes(concept)) {
-                return {
-                    condition: concept.charAt(0).toUpperCase() + concept.slice(1),
-                    confidence: 'High',
-                    recommendation: knowledgeBase.general[concept][lang] || knowledgeBase.general[concept]['en']
-                };
-            }
-        }
-    }
 
-    const { crop, topic } = extractCropAndTopic(normalized);
-
-    // 2. Precise Match from Knowledge Base (Crops)
-    if (crop && knowledgeBase.crops[crop]) {
-        const cropData = knowledgeBase.crops[crop];
-        let adviceText = cropData[topic] ? cropData[topic][lang] : null;
-
-        if (!adviceText && topic !== 'care') {
-            adviceText = cropData['care'] ? cropData['care'][lang] : null;
-        }
-
-        if (adviceText) {
-            const cropTitle = crop.charAt(0).toUpperCase() + crop.slice(1);
-            return {
-                condition: `Local Wisdom: ${cropTitle}`,
-                confidence: 'High',
-                recommendation: adviceText
-            };
-        }
-    }
-
-    // 3. Pattern Match Fallback
+    // 4. Pattern Match Fallback
     for (const pattern of CONDITION_PATTERNS) {
         if (pattern.keywords.some(kw => normalizedLower.includes(kw))) {
             return {
@@ -239,11 +261,11 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
         }
     }
 
-    // 4. AI Fallback (Premium Online Mode)
+    // 5. Final AI Attempt (if skipped earlier due to short length)
     if (process.env.OPENROUTER_API_KEY) {
-        console.log(`🤔 No local match. Attempting AI Fallback in ${lang}...`);
+        // ... (existing AI fallback)
         try {
-            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang);
+            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang, conversationHistory);
             if (aiResponse) {
                 return {
                     condition: 'AI Assistant',
@@ -256,13 +278,13 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
         }
     }
 
-    // 5. Final Fallback
+    // Final Fallback - only if AI also fails
     const finalFallbacks = {
-        en: "Sorry, I don't have specific info for that crop or topic yet. Try asking about watering, soil, or pests.",
-        hi: "क्षमा करें, मुझे उस फसल या विषय के बारे में विशिष्ट जानकारी नहीं है। कृपया मिट्टी, पानी या कीटों के बारे में पूछें।",
-        ta: "மன்னிக்கவும், அந்த பயிர் அல்லது தலைப்பு குறித்து என்னிடம் இன்னும் குறிப்பிட்ட தகவல் இல்லை. நீர்ப்பாசனம், மண் அல்லது பூச்சிகள் பற்றி கேட்டு முயற்சிக்கவும்.",
-        te: "క్షమించండి, ఆ పంట లేదా అంశం గురించి నాకు ఇంకా నిర్దిష్ట సమాచారం లేదు. నీరు, నేల లేదా తెగుళ్ల గురించి అడిగి చూడండి.",
-        mr: "क्षमस्व, माझ्याकडे अद्याप त्या पिकाबद्दल किंवा विषयाबद्दल विशिष्ट माहिती नाही. पाणी पिणे, माती किंवा कीड याबद्दल विचारण्याचा प्रयत्न करा."
+        en: "I couldn't find specific information for that query. Try asking about:\n- **Watering** schedules\n- **Pest** control\n- **Soil** requirements\n- Specific crops like potato, tomato, or dragon fruit",
+        hi: "क्षमा करें, मुझे इसके बारे में जानकारी नहीं मिली। पूछने का प्रयास करें:\n- **सिंचाई** के बारे में\n- **कीट** नियंत्रण\n- **मिट्टी** की आवश्यकताएं",
+        ta: "மன்னிக்கவும், அந்த தகவல் கிடைக்கவில்லை। கேட்டு முயற்சிக்கவும்:\n- **நீர்ப்பாசனம்**\n- **பூச்சி** கட்டுப்பாடு",
+        te: "క్షమించండి, ఆ సమాచారం లేదు. అడిగి చూడండి:\n- **నీరు** పెట్టడం\n- **తెగుళ్ళు**",
+        mr: "क्षमस्व, माहिती मिळाली नाही. विचारून पहा:\n- **पाणी** देणे\n- **कीड** नियंत्रण"
     };
 
     return {
@@ -272,4 +294,4 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null)
     };
 }
 
-module.exports = { inferAdvice, inferAdviceFromText };
+module.exports = { inferAdvice, inferAdviceFromText, generateSpeech };

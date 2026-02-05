@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 export interface LibraryItem {
     id: string;
@@ -20,67 +21,102 @@ export interface LibraryItem {
     treatmentHi?: string[];
 }
 
+const BACKEND_URL = "http://localhost:3001";
+
 export function useLibrary() {
     const [items, setItems] = useState<LibraryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const saved = localStorage.getItem("agrotalk_library");
-        if (saved) {
-            try {
-                setItems(JSON.parse(saved));
-            } catch (e) {
-                console.error("Failed to parse library items", e);
-                setItems([]);
-            }
-        }
+        fetchItems();
     }, []);
 
-    const saveToStorage = (newItems: LibraryItem[]) => {
-        localStorage.setItem("agrotalk_library", JSON.stringify(newItems));
-        setItems(newItems);
-    };
-
-    const addItem = (item: Omit<LibraryItem, "id" | "timestamp">) => {
-        // Check for duplicates based on thumbnail
-        const existingIndex = items.findIndex((i) => i.thumbnail === item.thumbnail);
-
-        if (existingIndex !== -1) {
-            // Move existing item to top and update timestamp
-            const existingItem = items[existingIndex];
-            const updatedItem: LibraryItem = {
-                ...existingItem,
-                timestamp: new Date().toISOString(),
-            };
-            const remainingItems = items.filter((_, idx) => idx !== existingIndex);
-            const newItems = [updatedItem, ...remainingItems];
-            saveToStorage(newItems);
-            return { item: updatedItem, isDuplicate: true };
+    const fetchItems = async () => {
+        setIsLoading(true);
+        try {
+            const response = await fetch(`${BACKEND_URL}/library`);
+            const data = await response.json();
+            if (data.success) {
+                // Prepend backend URL to thumbnails if they are relative paths
+                const itemsWithFullUrls = data.data.map((item: LibraryItem) => ({
+                    ...item,
+                    thumbnail: item.thumbnail.startsWith('/') ? `${BACKEND_URL}${item.thumbnail}` : item.thumbnail
+                }));
+                setItems(itemsWithFullUrls);
+            }
+        } catch (e) {
+            console.error("Failed to fetch library items", e);
+            toast.error("Failed to load history from server");
+        } finally {
+            setIsLoading(false);
         }
-
-        const newItem: LibraryItem = {
-            ...item,
-            id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
-            timestamp: new Date().toISOString(),
-        };
-        const newItems = [newItem, ...items];
-        saveToStorage(newItems);
-        return { item: newItem, isDuplicate: false };
     };
 
-    const deleteItem = (id: string) => {
-        const newItems = items.filter((i) => i.id !== id);
-        saveToStorage(newItems);
+    const addItem = async (item: Omit<LibraryItem, "id" | "timestamp">) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/library`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            const data = await response.json();
+            if (data.success) {
+                const newItem = {
+                    ...data.data,
+                    thumbnail: data.data.thumbnail.startsWith('/') ? `${BACKEND_URL}${data.data.thumbnail}` : data.data.thumbnail
+                };
+                setItems(prev => [newItem, ...prev]);
+                return { item: newItem, isDuplicate: false };
+            }
+        } catch (e) {
+            console.error("Failed to add library item", e);
+            toast.error("Failed to save to server");
+        }
+        return { item: null, isDuplicate: false };
     };
 
-    const updateItem = (id: string, updates: Partial<LibraryItem>) => {
-        const newItems = items.map((i) => (i.id === id ? { ...i, ...updates } : i));
-        saveToStorage(newItems);
+    const deleteItem = async (id: string) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/library/${id}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            if (data.success) {
+                setItems(prev => prev.filter((i) => i.id !== id));
+                return true;
+            }
+        } catch (e) {
+            console.error("Failed to delete library item", e);
+            toast.error("Failed to delete from server");
+        }
+        return false;
+    };
+
+    const updateItem = async (id: string, updates: Partial<LibraryItem>) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/library/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            const data = await response.json();
+            if (data.success) {
+                setItems(prev => prev.map((i) => (i.id === id ? { ...i, ...updates } : i)));
+                return true;
+            }
+        } catch (e) {
+            console.error("Failed to update library item", e);
+            toast.error("Failed to update server");
+        }
+        return false;
     };
 
     return {
         items,
+        isLoading,
         addItem,
         deleteItem,
         updateItem,
+        refresh: fetchItems
     };
 }

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic, Sparkles, CheckCircle, CloudRain, Sun, AlertTriangle, UserCircle } from "lucide-react";
+import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic, Sparkles, CheckCircle, CloudRain, Sun, AlertTriangle, UserCircle, Send, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import { Button } from "./ui/button";
-import { transcribeAndGetAdvice, getTextAdvice } from "@/lib/apiClient";
+import { transcribeAndGetAdvice, getTextAdvice, ConversationMessage } from "@/lib/apiClient";
 import type { AgriculturalAdvisory } from "@/lib/apiClient";
 import { getTranslation } from "@/lib/translations";
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,14 @@ interface IWindow extends Window {
 
 const MIN_AUDIO_BYTES = 1000;
 const RECORDER_TIMESLICE_MS = 250;
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  condition?: string;
+}
 
 interface VoiceInteractionProps {
   isOpen: boolean;
@@ -40,19 +48,44 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const [advisory, setAdvisory] = useState<AgriculturalAdvisory | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [weatherAlert, setWeatherAlert] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [ttsAudio, setTtsAudio] = useState<HTMLAudioElement | null>(null);
+  const [textInput, setTextInput] = useState("");
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
+
+  useEffect(() => {
+    localStorage.setItem("agrovoice_muted", String(isMuted));
+    if (isMuted) {
+      window.speechSynthesis?.cancel();
+      if (ttsAudio) {
+        ttsAudio.pause();
+      }
+      setIsPlaying(false);
+    }
+  }, [isMuted, ttsAudio]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordedMimeTypeRef = useRef<string>("audio/webm");
   const recognitionRef = useRef<any>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const accumulatedTranscriptRef = useRef("");
 
   const t = getTranslation('voice', language);
   const tCommon = getTranslation('common', language);
 
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
   useEffect(() => {
     if (isOpen && weatherContext) {
-      if (weatherContext.condition >= 50 && weatherContext.condition <= 99) {
+      if (weatherContext.condition >= 50 && weatherContext.condition < 99) {
         setWeatherAlert(language === 'hi' ? "चेतावनी: बारिश की संभावना है। कीटनाशक छिड़काव स्थगित करें।" : "Warning: Rain detected. Postpone pesticide spraying.");
       } else if (weatherContext.temp > 35) {
         setWeatherAlert(language === 'hi' ? "गर्मी की चेतावनी: अतिरिक्त सिंचाई की आवश्यकता हो सकती है।" : "Heat Alert: Crops may need extra irrigation today.");
@@ -73,15 +106,62 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     }
   }
 
+  const addMessage = (role: 'user' | 'assistant', content: string, condition?: string) => {
+    const newMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role,
+      content,
+      timestamp: new Date(),
+      condition
+    };
+    setChatMessages(prev => [...prev, newMsg]);
+  };
+
+  const processResponse = async (text: string) => {
+    // Add user message to chat
+    addMessage('user', text);
+    setState("processing");
+
+    try {
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true);
+
+      if (result.success && result.advisory) {
+        setTranscript(result.transcript || text);
+        setAdvisory(result.advisory);
+        setState("response");
+
+        // Add assistant message to chat
+        addMessage('assistant', result.advisory.recommendation, result.advisory.condition);
+
+        // Update conversation history for context
+        setConversationHistory(prev => [
+          ...prev,
+          { role: 'user' as const, content: text },
+          { role: 'assistant' as const, content: result.advisory!.recommendation }
+        ].slice(-6));
+
+        // Play TTS
+        setTimeout(() => {
+          playResponse(result.advisory!.recommendation, result.audio);
+        }, 300);
+      } else {
+        setErrorMessage(result.error || "Failed");
+        setState("idle");
+      }
+    } catch (e) {
+      setErrorMessage("Connection error");
+      setState("idle");
+    }
+  };
+
   const handleMicClick = async () => {
     if (state === "idle" || state === "response") {
       setErrorMessage(null);
       setTranscript("");
+      setTextInput("");
       setAdvisory(null);
       stopStreamTracks();
 
-      // PRIMARY MODE: Browser Speech Recognition (Faster, Free, works Offline)
-      // We prioritize this to avoid dependent backend STT services (like HF Whisper)
       const WindowObj = window as unknown as IWindow;
       const Recognition = WindowObj.webkitSpeechRecognition || WindowObj.SpeechRecognition;
 
@@ -98,31 +178,44 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
             'en': 'en-US'
           };
           recognition.lang = langMap[language] || 'en-US';
-          recognition.continuous = false;
-          recognition.interimResults = false;
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          accumulatedTranscriptRef.current = "";
 
           recognition.onstart = () => setState("recording");
 
-          recognition.onresult = async (event: any) => {
-            const text = event.results[0][0].transcript;
-            console.log("📝 Transcript:", text);
-            setState("processing");
+          recognition.onresult = (event: any) => {
+            let interimTranscript = "";
+            let finalChunk = "";
 
-            // Send Text to Backend (Inference Service)
-            const result = await getTextAdvice(text, language, weatherContext);
-
-            if (result.success && result.advisory) {
-              setTranscript(result.transcript || text);
-              setAdvisory(result.advisory);
-              setState("response");
-              // Give a small delay for the UI to transition before speaking
-              setTimeout(() => {
-                speakResponse(result.advisory.recommendation);
-              }, 300);
-            } else {
-              setErrorMessage(result.error || "Failed");
-              setState("idle");
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                finalChunk += event.results[i][0].transcript;
+              } else {
+                interimTranscript += event.results[i][0].transcript;
+              }
             }
+
+            if (finalChunk) {
+              accumulatedTranscriptRef.current += finalChunk + " ";
+            }
+
+            // Show real-time feedback in the text input so user sees we are listening
+            setTextInput(accumulatedTranscriptRef.current + interimTranscript);
+          };
+
+          recognition.onend = () => {
+            console.log("🎙️ Speech recognition ended");
+            setState(prev => {
+              if (prev === "recording") {
+                // If it ended while we thought we were still recording, 
+                // it might mean the browser reached a silence timeout.
+                // We'll process what we have if any.
+                return "idle"; // handleMicClick will handle the rest if called, 
+                // but here we just ensure we don't get stuck.
+              }
+              return prev;
+            });
           };
 
           recognition.onerror = (e: any) => {
@@ -131,7 +224,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
               setErrorMessage(t.micDenied);
             } else if (e.error === 'network') {
               setErrorMessage("Network error. Try checking connection.");
-            } else {
+            } else if (e.error !== 'aborted') {
               setErrorMessage("Voice recognition failed. Try again.");
             }
             setState("idle");
@@ -147,7 +240,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
         return;
       }
 
-      // FALLBACK MODE: MediaRecorder + Backend Whisper (Only if Browser Speech missing)
+      // Fallback to MediaRecorder
       console.log("📡 Browser Speech missing. Falling back to Backend Whisper...");
       if (!navigator.onLine) {
         setErrorMessage("Offline speech not supported in this browser.");
@@ -184,14 +277,24 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
           }
 
           setState("processing");
-          const result = await transcribeAndGetAdvice(audioBlob, language, weatherContext);
+          const result = await transcribeAndGetAdvice(audioBlob, language, weatherContext, conversationHistory, true);
 
           if (result.success && result.advisory) {
             setTranscript(result.transcript || "");
             setAdvisory(result.advisory);
             setState("response");
             setShowTranscript(false);
-            speakResponse(result.advisory.recommendation);
+
+            addMessage('user', result.transcript || '');
+            addMessage('assistant', result.advisory.recommendation, result.advisory.condition);
+
+            setConversationHistory(prev => [
+              ...prev,
+              { role: 'user' as const, content: result.transcript || '' },
+              { role: 'assistant' as const, content: result.advisory!.recommendation }
+            ].slice(-6));
+
+            playResponse(result.advisory.recommendation, result.audio);
           } else {
             setErrorMessage(result.error || t.serverError);
             setState("idle");
@@ -209,22 +312,49 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     }
 
     if (state === "recording") {
-      stopStreamTracks();
+      if (recognitionRef.current) {
+        // For browser recognition (manual stop)
+        const finalPayload = textInput.trim();
+        recognitionRef.current.stop();
+        stopStreamTracks();
+        if (finalPayload) {
+          await processResponse(finalPayload);
+        } else {
+          setState("idle");
+        }
+      } else if (mediaRecorderRef.current) {
+        // For MediaRecorder fallback
+        mediaRecorderRef.current.stop();
+        // processing happens in mediaRecorder.onstop
+      } else {
+        stopStreamTracks();
+        setState("idle");
+      }
     }
+  };
+
+  const handleTextSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!textInput.trim()) return;
+
+    const text = textInput.trim();
+    setTextInput("");
+    await processResponse(text);
   };
 
   const cleanMarkdown = (text: string) => {
     return text
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove Bold
-      .replace(/\*(.*?)\*/g, '$1')     // Remove Italics
-      .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove Links
-      .replace(/#{1,6}\s+(.*)/g, '$1')  // Remove Headers
-      .replace(/[-*]\s+/g, '')          // Remove List Bullets
-      .replace(/[`](.*?)[`]/g, '$1')    // Remove Code
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/#{1,6}\s+(.*)/g, '$1')
+      .replace(/[-*]\s+/g, '')
+      .replace(/[`](.*?)[`]/g, '$1')
       .trim();
   };
 
   const speakResponse = (text: string) => {
+    if (isMuted) return;
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const cleanedText = cleanMarkdown(text);
@@ -241,7 +371,6 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       const targetLang = langMap[language] || 'en-IN';
       utterance.lang = targetLang;
 
-      // Find the most natural voice (Google or Neural)
       const voices = window.speechSynthesis.getVoices();
       const bestVoice = voices.find(v =>
         (v.lang.replace('_', '-').startsWith(targetLang)) &&
@@ -250,10 +379,9 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
 
       if (bestVoice) {
         utterance.voice = bestVoice;
-        console.log(`🎙️ Using AI Voice: ${bestVoice.name}`);
+        console.log(`🎙️ Using Browser Voice: ${bestVoice.name}`);
       }
 
-      // Human-like settings
       utterance.pitch = 1.0;
       utterance.rate = 1.0;
 
@@ -264,13 +392,44 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     }
   };
 
+  const playResponse = (text: string, audioBase64?: string) => {
+    if (isMuted) {
+      console.log('🔇 Muted: Skipping audio playback');
+      return;
+    }
+    if (audioBase64) {
+      console.log('🔊 Playing natural TTS audio');
+      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+      audio.onended = () => setIsPlaying(false);
+      audio.onerror = () => {
+        console.warn('TTS audio failed, falling back to browser speech');
+        speakResponse(text);
+      };
+      setTtsAudio(audio);
+      setIsPlaying(true);
+      audio.play().catch(() => speakResponse(text));
+    } else {
+      speakResponse(text);
+    }
+  };
+
   const handlePlayAudio = () => {
     if (!advisory?.recommendation) return;
     if (isPlaying) {
       window.speechSynthesis?.cancel();
+      if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio.currentTime = 0;
+      }
       setIsPlaying(false);
     } else {
-      speakResponse(advisory.recommendation);
+      if (ttsAudio) {
+        ttsAudio.currentTime = 0;
+        setIsPlaying(true);
+        ttsAudio.play().catch(() => speakResponse(advisory.recommendation));
+      } else {
+        speakResponse(advisory.recommendation);
+      }
     }
   };
 
@@ -278,28 +437,34 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
 
   return (
     <div className={cn(
-      isIntegrated ? "flex flex-col h-full bg-background" : "fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col"
+      isIntegrated ? "flex flex-col h-full bg-background pb-24" : "fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col"
     )}>
       <header className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
-        {!isIntegrated ? (
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95">
-            <X size={20} />
-          </button>
-        ) : (
-          <div className="w-10" />
-        )}
+        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95">
+          <X size={20} />
+        </button>
         <h1 className="text-headline font-bold text-foreground">
           {t.title}
         </h1>
-        <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-green-wash">
-          <Sparkles className="w-5 h-5 text-primary" />
-        </div>
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className={cn(
+            "w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95",
+            isMuted ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border hover:bg-muted text-primary"
+          )}
+          title={isMuted ? "Unmute AI" : "Mute AI"}
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto">
-
-        {weatherAlert && state === "idle" && (
-          <div className="w-full max-w-sm mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 animate-fade-in shadow-sm">
+      {/* Chat Messages Container */}
+      <div
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+      >
+        {weatherAlert && chatMessages.length === 0 && (
+          <div className="w-full max-w-sm mx-auto mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 animate-fade-in shadow-sm">
             <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div>
               <h3 className="text-sm font-bold text-amber-800">AgroGuard Alert</h3>
@@ -308,117 +473,121 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
           </div>
         )}
 
-        {state === "idle" && (
-          <div className="text-center space-y-8 animate-fade-in">
-            <div className="relative w-48 h-48 mx-auto">
+        {chatMessages.length === 0 && state === "idle" && (
+          <div className="text-center py-12 animate-fade-in">
+            <div className="relative w-32 h-32 mx-auto mb-6">
               <div className="absolute inset-0 rounded-full bg-green-wash/50 animate-breathing" />
-              <div className="absolute inset-6 rounded-full bg-white shadow-apple-lg flex items-center justify-center border border-primary/10">
-                <UserCircle className="w-20 h-20 text-primary opacity-90" />
+              <div className="absolute inset-4 rounded-full bg-white shadow-apple-lg flex items-center justify-center border border-primary/10">
+                <UserCircle className="w-16 h-16 text-primary opacity-90" />
               </div>
             </div>
-            <p className="text-body text-muted-foreground max-w-xs">{t.tapToSpeak}</p>
+            <p className="text-body text-muted-foreground max-w-xs mx-auto">{t.tapToSpeak}</p>
             {errorMessage && (
-              <div className="bg-destructive/10 p-3 rounded-lg mt-2">
-                <p className="text-footnote text-destructive max-w-xs mx-auto font-medium" role="alert">{errorMessage}</p>
-                {errorMessage.includes('HF_TOKEN') && <p className="text-[10px] text-destructive/80 mt-1">Backend token missing. Using text mode.</p>}
+              <div className="bg-destructive/10 p-3 rounded-lg mt-4 max-w-xs mx-auto">
+                <p className="text-footnote text-destructive font-medium" role="alert">{errorMessage}</p>
               </div>
             )}
           </div>
         )}
 
-        {(state === "recording" || state === "processing") && (
-          <div className="text-center space-y-8 animate-fade-in">
-            <div className="relative w-48 h-48 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-green-wash animate-pulse-ring-active" />
-              <div className="absolute inset-4 rounded-full bg-white shadow-green-lg flex items-center justify-center overflow-hidden border-2 border-primary/20">
-                <UserCircle className={cn("w-20 h-20 text-primary", state === "recording" && "animate-pulse")} />
-                {state === "processing" && (
-                  <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-sm">
-                    <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin-smooth" />
+        {/* Chat Bubbles */}
+        {chatMessages.map((msg) => (
+          <div
+            key={msg.id}
+            className={cn(
+              "max-w-[85%] animate-fade-in",
+              msg.role === 'user' ? "ml-auto" : "mr-auto"
+            )}
+          >
+            {msg.role === 'user' ? (
+              <div className="bg-primary text-primary-foreground px-4 py-3 rounded-2xl rounded-br-md shadow-sm">
+                <p className="text-body">{msg.content}</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+                {msg.condition && (
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
+                    <UserCircle className="w-4 h-4 text-primary" />
+                    <span className="text-caption font-bold uppercase tracking-widest text-primary">{msg.condition}</span>
                   </div>
                 )}
+                <div className="prose prose-sm text-foreground max-w-none leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-title font-bold text-primary">{state === "recording" ? t.listening : t.thinking}</p>
-              <p className="text-subhead text-muted-foreground">{state === "recording" ? t.stopRecording : tCommon.loading}</p>
+            )}
+            <p className={cn(
+              "text-[10px] text-muted-foreground mt-1",
+              msg.role === 'user' ? "text-right" : "text-left"
+            )}>
+              {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+        ))}
+
+        {/* Processing Indicator */}
+        {state === "processing" && (
+          <div className="max-w-[85%] mr-auto animate-fade-in">
+            <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-muted-foreground">{t.thinking}</span>
+              </div>
             </div>
           </div>
         )}
 
-        {state === "response" && (
-          <div className="w-full max-w-md space-y-5 animate-fade-in py-4">
-            <div className="flex items-center justify-center gap-3 p-4 bg-primary/5 rounded-apple-lg border border-primary/10">
-              <CheckCircle className="w-6 h-6 text-primary" />
-              <span className="text-headline font-bold text-primary">{tCommon.success}</span>
-            </div>
-            <div className="bg-card rounded-apple-lg border border-border shadow-apple p-5">
-              <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/50">
-                <div className={cn(
-                  "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold overflow-hidden transition-all duration-500",
-                  isPlaying ? "bg-primary/20 text-primary w-40" : "bg-muted text-muted-foreground w-28"
-                )}>
-                  {isPlaying ? (
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-0.5 h-3">
-                        <div className="w-1 bg-primary rounded-full animate-vocal-1" />
-                        <div className="w-1 bg-primary rounded-full animate-vocal-2" />
-                        <div className="w-1 bg-primary rounded-full animate-vocal-3" />
-                      </div>
-                      <span className="font-bold">AgroBot Speaking</span>
-                    </div>
-                  ) : <span>Tap to Replay</span>}
-                </div>
-                <button
-                  onClick={handlePlayAudio}
-                  className={cn(
-                    "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300",
-                    isPlaying ? "bg-primary text-primary-foreground shadow-lg scale-110" : "bg-primary/10 text-primary hover:bg-primary/20"
-                  )}
-                >
-                  {isPlaying ? <Volume2 size={22} className="animate-pulse" /> : <Volume2 size={22} />}
-                </button>
+        {/* Recording Indicator */}
+        {state === "recording" && (
+          <div className="max-w-[85%] ml-auto animate-fade-in">
+            <div className="bg-primary/10 border border-primary/20 px-4 py-3 rounded-2xl rounded-br-md shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-sm text-primary font-medium">{t.listening}</span>
               </div>
-
-              {advisory && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <UserCircle className="w-4 h-4 text-primary" />
-                    <span className="text-caption font-bold uppercase tracking-widest text-primary">{advisory.condition}</span>
-                  </div>
-
-                  <div className="prose prose-sm text-foreground max-w-none leading-relaxed">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {advisory.recommendation}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              )}
             </div>
-
-            {transcript && (
-              <div className="bg-muted/30 rounded-lg p-3">
-                <button onClick={() => setShowTranscript(!showTranscript)} className="flex items-center gap-2 text-xs font-medium text-muted-foreground w-full">
-                  {showTranscript ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  {t.youSaid}
-                </button>
-                {showTranscript && <p className="mt-2 text-sm text-muted-foreground italic">"{transcript}"</p>}
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      <div className="pb-10 pt-4 flex flex-col items-center gap-3 bg-gradient-to-t from-background via-background to-transparent">
-        <MicrophoneButton
-          isRecording={state === "recording"}
-          isProcessing={state === "processing"}
-          onClick={handleMicClick}
-          size={state === "response" ? "default" : "large"}
-        />
-        {state === "response" && (
-          <p className="text-subhead text-muted-foreground">{t.askAnother}</p>
-        )}
+      {/* Input Area */}
+      <div className="border-t border-border bg-background p-4">
+        <div className="flex items-center gap-3">
+          {/* Voice Button */}
+          <MicrophoneButton
+            isRecording={state === "recording"}
+            isProcessing={state === "processing"}
+            onClick={handleMicClick}
+            size="small"
+          />
+
+          {/* Text Input */}
+          <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder={language === 'hi' ? "संदेश टाइप करें..." : "Type a message..."}
+              className="flex-1 h-12 px-4 rounded-full bg-muted border border-border text-body placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+              disabled={state === "recording" || state === "processing"}
+            />
+            {textInput.trim() && (
+              <button
+                type="submit"
+                disabled={!textInput.trim() || state === "recording" || state === "processing"}
+                className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors active:scale-95 animate-fade-in"
+              >
+                <Send size={20} />
+              </button>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   );

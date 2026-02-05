@@ -1,8 +1,8 @@
 /**
- * API Client
+ * API Client (Enhanced)
  * 
  * Handles communication with the backend proxy server.
- * The backend handles all Hugging Face API calls to avoid CORS issues.
+ * Now supports conversation history for context-aware AI responses.
  */
 
 const BACKEND_URL = 'http://localhost:3001';
@@ -25,38 +25,37 @@ export interface AnalysisResponse {
     error?: string;
 }
 
+export interface ConversationMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 export interface TranscribeResponse {
     success: boolean;
     transcript?: string;
     advisory?: AgriculturalAdvisory;
+    audio?: string; // Base64 MP3 audio from TTS
     error?: string;
 }
 
 /**
  * Analyze a crop image via the backend proxy
- * 
- * @param imageFile - The image file to analyze
- * @returns Analysis result with condition, confidence, and recommendation
  */
 export async function analyzeImage(imageFile: File): Promise<AnalysisResponse> {
     console.log('📤 Sending image to backend for analysis...');
     console.log(`   File: ${imageFile.name} (${imageFile.type}, ${imageFile.size} bytes)`);
 
     try {
-        // Create form data with image
         const formData = new FormData();
         formData.append('image', imageFile);
 
-        // Send to backend
         const response = await fetch(`${BACKEND_URL}/analyze-image`, {
             method: 'POST',
             body: formData
-            // No Content-Type header - browser sets it correctly for FormData
         });
 
         console.log(`📥 Backend response status: ${response.status}`);
 
-        // Parse response
         const result = await response.json();
         console.log('📥 Backend response:', result);
 
@@ -72,7 +71,6 @@ export async function analyzeImage(imageFile: File): Promise<AnalysisResponse> {
     } catch (error) {
         console.error('❌ Failed to connect to backend:', error);
 
-        // Check if it's a network error (backend not running)
         if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
             return {
                 success: false,
@@ -92,12 +90,16 @@ export async function analyzeImage(imageFile: File): Promise<AnalysisResponse> {
  *
  * @param audioBlob - Recorded audio blob (e.g. audio/webm)
  * @param language - UI language hint (e.g. 'en', 'hi')
- * @returns Transcript and advisory, or error
+ * @param weatherContext - Current weather data
+ * @param conversationHistory - Previous conversation for context
+ * @param useTts - Whether to request natural TTS audio
  */
 export async function transcribeAndGetAdvice(
     audioBlob: Blob,
     language: string,
-    weatherContext?: { temp: number; condition: number; humidity: number }
+    weatherContext?: { temp: number; condition: number; humidity: number },
+    conversationHistory: ConversationMessage[] = [],
+    useTts: boolean = true
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending audio to backend for transcription...');
     console.log(`   Blob: ${audioBlob.type}, ${audioBlob.size} bytes`);
@@ -106,8 +108,14 @@ export async function transcribeAndGetAdvice(
         const formData = new FormData();
         formData.append('audio', audioBlob, 'recording.webm');
         formData.append('language', language);
+        formData.append('useTts', useTts.toString());
+
         if (weatherContext) {
             formData.append('weatherData', JSON.stringify(weatherContext));
+        }
+
+        if (conversationHistory.length > 0) {
+            formData.append('conversationHistory', JSON.stringify(conversationHistory));
         }
 
         const response = await fetch(`${BACKEND_URL}/transcribe`, {
@@ -135,6 +143,7 @@ export async function transcribeAndGetAdvice(
             success: true,
             transcript: result.transcript,
             advisory: result.advisory as AgriculturalAdvisory,
+            audio: result.audio || undefined
         };
     } catch (error) {
         console.error('❌ Transcribe request failed:', error);
@@ -153,21 +162,36 @@ export async function transcribeAndGetAdvice(
 
 /**
  * Get agricultural advice from text (bypassing speech-to-text)
- * Useful for offline speech recognition or direct text chat.
+ * Now supports conversation history for context-aware responses.
+ * 
+ * @param text - User's text query
+ * @param language - UI language
+ * @param weatherContext - Current weather data
+ * @param conversationHistory - Previous conversation for context
+ * @param useTts - Whether to request natural TTS audio
  */
 export async function getTextAdvice(
     text: string,
     language: string,
-    weatherContext?: { temp: number; condition: number; humidity: number }
+    weatherContext?: { temp: number; condition: number; humidity: number },
+    conversationHistory: ConversationMessage[] = [],
+    useTts: boolean = true
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending text to backend for inference...');
+    console.log(`   History items: ${conversationHistory.length}`);
 
     try {
         const formData = new FormData();
         formData.append('text', text);
         formData.append('language', language);
+        formData.append('useTts', useTts.toString());
+
         if (weatherContext) {
             formData.append('weatherData', JSON.stringify(weatherContext));
+        }
+
+        if (conversationHistory.length > 0) {
+            formData.append('conversationHistory', JSON.stringify(conversationHistory));
         }
 
         const response = await fetch(`${BACKEND_URL}/transcribe`, {
@@ -178,18 +202,17 @@ export async function getTextAdvice(
         const result = await response.json();
 
         if (!response.ok) {
-            // Handle error, maybe local logic fell back to general?
             return {
                 success: false,
                 error: result.error || `Server error: ${response.status}`,
             };
         }
 
-        // Return transcript (the text itself) and advice
         return {
             success: true,
             transcript: result.transcript,
             advisory: result.advisory as AgriculturalAdvisory,
+            audio: result.audio || undefined
         };
 
     } catch (error) {

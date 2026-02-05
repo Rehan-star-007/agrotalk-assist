@@ -20,7 +20,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-apple border-t border-border shadow-nav">
       <div
-        className="flex justify-around items-center max-w-lg mx-auto"
+        className="flex justify-around items-center w-full max-w-lg mx-auto px-2 safe-area-pb"
         style={{
           height: "72px",
           paddingBottom: "env(safe-area-inset-bottom, 0px)"
@@ -35,7 +35,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
               key={id}
               onClick={() => onTabChange(id)}
               className={cn(
-                "relative flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200",
+                "relative flex flex-col items-center justify-center gap-1 px-2 sm:px-4 py-2 transition-all duration-200",
                 "focus:outline-none focus:ring-2 focus:ring-primary/30 rounded-xl",
                 "active:scale-95",
                 isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"

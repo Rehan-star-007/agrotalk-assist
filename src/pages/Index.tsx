@@ -12,6 +12,7 @@ import { LibraryScreen } from "@/components/LibraryScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useLibrary } from "@/hooks/useLibrary";
+import { useChat } from "@/hooks/useChat";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
 
 import { getTranslation } from "@/lib/translations";
@@ -40,6 +41,7 @@ export default function Index() {
       const result = await response.json();
 
       if (result.success) {
+        console.log('Weather data fetched:', result.data);
         setWeatherData(result.data);
       } else {
         setWeatherError(result.error || 'Failed to fetch weather');
@@ -95,16 +97,45 @@ export default function Index() {
     setPlayingId(playingId === id ? null : id);
   };
 
-  const { items: libraryItems } = useLibrary();
+  // Move hooks to top level
+  const { items: libraryItems, refresh: refreshLibrary } = useLibrary();
+  const { history: chatHistory, fetchHistory: fetchChatHistory } = useChat();
+
+  // Refresh chat history when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'home') {
+      fetchChatHistory();
+    }
+  }, [activeTab]);
 
   // Home Screen Content
   const renderHomeScreen = () => {
-    const recentScans = libraryItems.slice(0, 3);
+    // Combine and sort recent items
+    const allItems = [
+      ...libraryItems.map(item => ({
+        id: item.id,
+        query: language === "hi" ? item.diseaseNameHi : item.diseaseName,
+        response: language === "hi" ? item.summaryHi : item.summary,
+        timestamp: new Date(item.timestamp),
+        cropType: (item.cropType.toLowerCase() || 'general') as any,
+        type: 'scan'
+      })),
+      ...chatHistory.map(item => ({
+        id: item.id,
+        query: item.query,
+        response: item.response,
+        timestamp: new Date(item.timestamp),
+        cropType: 'general' as const,
+        type: 'chat'
+      }))
+    ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    const recentQueries = allItems.slice(0, 3);
 
     return (
-      <div className="flex flex-col flex-1 pb-28 bg-background">
+      <div className="flex flex-col flex-1 pb-32 bg-background">
         {/* Header content unchanged... */}
-        <header className="px-5 pt-6 pb-4">
+        <header className="px-5 pt-8 pb-4 max-w-lg mx-auto w-full">
           <div className="flex items-center justify-between mb-8">
             <ConnectionStatus isOnline={isOnline} />
             <LanguageSelector
@@ -132,7 +163,7 @@ export default function Index() {
         </header>
 
         {/* Main Microphone Button */}
-        <div className="flex flex-col items-center justify-center py-6">
+        <div className="flex flex-col items-center justify-center py-6 max-w-lg mx-auto w-full">
           <MicrophoneButton
             isRecording={false}
             isProcessing={false}
@@ -153,25 +184,25 @@ export default function Index() {
         </div>
 
         {/* Recent Queries */}
-        <section className="px-5 mt-8">
+        <section className="px-5 mt-8 max-w-lg mx-auto w-full">
           <h2 className="text-headline font-bold text-foreground mb-4">{t.recentQueries}</h2>
           <div className="space-y-3">
-            {recentScans.length > 0 ? (
-              recentScans.map((item) => (
+            {recentQueries.length > 0 ? (
+              recentQueries.map((item) => (
                 <RecentQueryCard
                   key={item.id}
                   id={item.id}
-                  query={language === "hi" ? item.diseaseNameHi : item.diseaseName}
-                  response={language === "hi" ? item.summaryHi : item.summary}
-                  timestamp={new Date(item.timestamp)}
-                  cropType={item.cropType.toLowerCase() as any}
+                  query={item.query}
+                  response={item.response}
+                  timestamp={item.timestamp}
+                  cropType={item.cropType}
                   onPlay={handlePlayQuery}
                   isPlaying={playingId === item.id}
                 />
               ))
             ) : (
               <div className="p-8 text-center bg-muted/50 rounded-apple border border-dashed border-border">
-                <p className="text-subhead text-muted-foreground">No recent scans yet</p>
+                <p className="text-subhead text-muted-foreground">No recent queries yet</p>
               </div>
             )}
           </div>
@@ -181,7 +212,7 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Offline Banner */}
       {!isOnline && <OfflineBanner language={language} />}
 
@@ -206,7 +237,13 @@ export default function Index() {
             />
           </div>
         )}
-        {activeTab === "library" && <LibraryScreen language={language} />}
+        {activeTab === "library" && (
+          <LibraryScreen
+            language={language}
+            weatherData={weatherData}
+            isWeatherLoading={isWeatherLoading}
+          />
+        )}
         {activeTab === "settings" && (
           <SettingsScreen
             language={language}
@@ -224,7 +261,10 @@ export default function Index() {
       {/* Image Analysis Modal */}
       <ImageAnalysis
         isOpen={isImageOpen}
-        onClose={() => setIsImageOpen(false)}
+        onClose={() => {
+          setIsImageOpen(false);
+          refreshLibrary();
+        }}
         language={language}
       />
     </div>

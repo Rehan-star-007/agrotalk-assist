@@ -1,26 +1,26 @@
 /**
- * Voice Transcription Route
+ * Voice Transcription Route (Enhanced)
  *
  * POST /transcribe
- * Accepts multipart form data with an audio file OR text.
- * Returns transcript and agricultural advisory.
+ * Accepts multipart form data with audio/text and conversation history.
+ * Returns transcript, advisory, and optionally natural TTS audio.
  */
 
 const express = require('express');
 const multer = require('multer');
 const transcriptionService = require('../services/transcriptionService');
 const inferenceService = require('../services/inferenceService');
+const { generateSpeech } = require('../services/openRouterService');
 
 const router = express.Router();
 
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB (allow for images)
+        fileSize: 10 * 1024 * 1024, // 10MB
     },
 });
 
-// Allow both audio and image fields
 const uploadFields = upload.fields([
     { name: 'audio', maxCount: 1 },
     { name: 'image', maxCount: 1 }
@@ -55,26 +55,68 @@ router.post('/', uploadFields, async (req, res) => {
         }
 
         // 3. Process Context
-        const { language, weatherData } = req.body;
+        const { language, weatherData, conversationHistory: historyJson } = req.body;
+
         let weatherContext;
         if (weatherData) {
             try { weatherContext = JSON.parse(weatherData); } catch (e) { }
         }
 
+        // Parse conversation history for context-aware responses
+        let conversationHistory = [];
+        if (historyJson) {
+            try {
+                conversationHistory = JSON.parse(historyJson);
+                console.log(`📜 Received ${conversationHistory.length} history items for context`);
+            } catch (e) {
+                console.log('⚠️ Failed to parse conversation history');
+            }
+        }
+
         console.log(`🌾 Inferring advice for: "${transcript}"`);
 
-        // 4. Get Advisory (Local -> AI)
-        // Note: We ignore the image here for now, but the infrastructure is ready in openRouterService
-        // Ideally we pass the image buffer to inferAdviceFromText if we want multimodal
+        // 4. Get Advisory (Local -> AI) with conversation history
+        const advisory = await inferenceService.inferAdviceFromText(
+            transcript,
+            language,
+            weatherContext,
+            conversationHistory
+        );
 
-        const advisory = await inferenceService.inferAdviceFromText(transcript, language, weatherContext);
+        // 5. Generate Natural TTS Audio (if OpenAI key is available)
+        let audioBase64 = null;
+        const useTts = req.body.useTts === 'true';
+
+        if (useTts && process.env.OPENAI_API_KEY) {
+            console.log('🔊 Generating natural TTS audio...');
+            const audioBuffer = await generateSpeech(advisory.recommendation);
+            if (audioBuffer) {
+                audioBase64 = audioBuffer.toString('base64');
+            }
+        }
 
         console.log(`✅ [${requestId}] Success`);
+
+        // Save to Chat History
+        try {
+            const { saveChatItem } = require('../services/storageService');
+            saveChatItem({
+                id: requestId,
+                query: transcript,
+                response: advisory.recommendation,
+                timestamp: new Date().toISOString(),
+                type: req.body.text ? 'text' : 'voice',
+                weatherContext
+            });
+        } catch (e) {
+            console.error('Failed to save chat history:', e);
+        }
 
         return res.json({
             success: true,
             transcript,
-            advisory
+            advisory,
+            audio: audioBase64 // Base64 MP3 audio (or null if TTS disabled/failed)
         });
 
     } catch (error) {

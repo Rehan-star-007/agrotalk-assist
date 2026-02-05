@@ -1,12 +1,23 @@
-import { useState } from "react";
-import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2, Sun, CloudRain, CloudSnow, Wind } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { useLibrary, LibraryItem } from "@/hooks/useLibrary";
 import { toast } from "sonner";
 
+interface WeatherData {
+  current: {
+    temperature_2m: number;
+    relative_humidity_2m: number;
+    weather_code: number;
+    wind_speed_10m: number;
+  };
+}
+
 interface LibraryScreenProps {
   language: string;
+  weatherData?: WeatherData | null;
+  isWeatherLoading?: boolean;
 }
 
 const translations = {
@@ -37,6 +48,11 @@ const translations = {
     days: "days",
     weather: "Today's Weather",
     partlyCloudy: "Partly Cloudy",
+    clearSky: "Clear Sky",
+    cloudy: "Cloudy",
+    rainy: "Rainy",
+    snowy: "Snowy",
+    loading: "Loading...",
   },
   hi: {
     title: "विश्लेषण इतिहास",
@@ -65,17 +81,42 @@ const translations = {
     days: "दिन",
     weather: "आज का मौसम",
     partlyCloudy: "आंशिक बादल",
+    clearSky: "साफ आसमान",
+    cloudy: "बादल",
+    rainy: "बारिश",
+    snowy: "बर्फबारी",
+    loading: "लोड हो रहा है...",
   },
 };
 
 type FilterType = "all" | "healthy" | "diseased" | "thisWeek";
 
-export function LibraryScreen({ language }: LibraryScreenProps) {
-  const { items, deleteItem, updateItem } = useLibrary();
+const getWeatherLabel = (code: number, isHindi: boolean): string => {
+  if (code === 0 || code === 1) return isHindi ? "साफ आसमान" : "Clear Sky";
+  if (code === 2) return isHindi ? "आंशिक बादल" : "Partly Cloudy";
+  if (code === 3) return isHindi ? "बादल" : "Cloudy";
+  if (code >= 45 && code <= 48) return isHindi ? "कोहरा" : "Foggy";
+  if (code >= 51 && code <= 67) return isHindi ? "बारिश" : "Rainy";
+  if (code >= 71 && code <= 86) return isHindi ? "बर्फबारी" : "Snowy";
+  if (code >= 95 && code <= 99) return isHindi ? "तूफान" : "Thunderstorm";
+  return isHindi ? "मौसम" : "Weather";
+};
+
+const WeatherIcon: React.FC<{ code: number }> = ({ code }) => {
+  if (code === 0 || code === 1) return <Sun size={48} className="opacity-90 text-amber-400" />;
+  if (code === 2 || code === 3) return <Cloud size={48} className="opacity-90" />;
+  if (code >= 51 && code <= 67) return <CloudRain size={48} className="opacity-90" />;
+  if (code >= 71 && code <= 86) return <CloudSnow size={48} className="opacity-90" />;
+  return <Cloud size={48} className="opacity-90" />;
+};
+
+export function LibraryScreen({ language, weatherData, isWeatherLoading }: LibraryScreenProps) {
+  const { items, deleteItem, updateItem, isLoading } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
+  const [editDisease, setEditDisease] = useState("");
+  const [editCrop, setEditCrop] = useState("");
 
   const t = translations[language as keyof typeof translations] || translations.en;
   const isHindi = language === "hi";
@@ -124,14 +165,15 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
 
   const startEdit = (item: LibraryItem) => {
     setEditingId(item.id);
-    setEditValue(isHindi ? item.diseaseNameHi : item.diseaseName);
+    setEditDisease(isHindi ? item.diseaseNameHi : item.diseaseName);
+    setEditCrop(isHindi ? item.cropTypeHi : item.cropType);
   };
 
   const saveEdit = (id: string) => {
     if (isHindi) {
-      updateItem(id, { diseaseNameHi: editValue });
+      updateItem(id, { diseaseNameHi: editDisease, cropTypeHi: editCrop });
     } else {
-      updateItem(id, { diseaseName: editValue });
+      updateItem(id, { diseaseName: editDisease, cropType: editCrop });
     }
     setEditingId(null);
     toast.success(isHindi ? "अपडेट किया गया" : "Updated successfully");
@@ -146,6 +188,11 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
 
   const showEmpty = items.length === 0;
 
+  // Weather display values
+  const temperature = weatherData?.current?.temperature_2m ?? null;
+  const humidity = weatherData?.current?.relative_humidity_2m ?? null;
+  const weatherCode = weatherData?.current?.weather_code ?? 2;
+  const weatherLabel = getWeatherLabel(weatherCode, isHindi);
 
   return (
     <div className="flex flex-col flex-1 bg-muted pb-28 animate-fade-in">
@@ -161,20 +208,34 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
       </div>
 
       <div className="px-5 py-4 space-y-4">
-        {/* Weather Card */}
+        {/* Weather Card - Real-time Data */}
         <div className="bg-gradient-to-br from-primary to-primary/80 rounded-apple-lg p-5 text-primary-foreground shadow-green">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-subhead opacity-80">{t.weather}</p>
-              <p className="text-display font-bold mt-1">28°C</p>
-              <p className="text-subhead opacity-80 mt-1">{t.partlyCloudy}</p>
+              {isWeatherLoading ? (
+                <p className="text-display font-bold mt-1 animate-pulse">{t.loading}</p>
+              ) : temperature !== null ? (
+                <>
+                  <p className="text-display font-bold mt-1">{Math.round(temperature)}°C</p>
+                  <p className="text-subhead opacity-80 mt-1">{weatherLabel}</p>
+                </>
+              ) : (
+                <p className="text-display font-bold mt-1">--°C</p>
+              )}
             </div>
             <div className="flex flex-col items-end gap-2">
-              <Cloud size={48} className="opacity-90" />
-              <div className="flex items-center gap-1 text-subhead opacity-80">
-                <Droplets size={16} />
-                <span>65%</span>
-              </div>
+              {!isWeatherLoading && weatherData ? (
+                <>
+                  <WeatherIcon code={weatherCode} />
+                  <div className="flex items-center gap-1 text-subhead opacity-80">
+                    <Droplets size={16} />
+                    <span>{humidity ?? '--'}%</span>
+                  </div>
+                </>
+              ) : (
+                <Cloud size={48} className="opacity-50 animate-pulse" />
+              )}
             </div>
           </div>
         </div>
@@ -257,7 +318,7 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
           </div>
         ) : (
           /* Analysis Cards Grid */
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 gap-y-8 pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 gap-y-8 pt-4">
             {filteredItems.map((analysis) => (
               <div
                 key={analysis.id}
@@ -310,15 +371,35 @@ export function LibraryScreen({ language }: LibraryScreenProps) {
                     </div>
 
                     {editingId === analysis.id ? (
-                      <div className="flex gap-2 mb-2">
-                        <input
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="flex-1 px-3 py-1 border rounded text-headline bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
-                          autoFocus
-                          onKeyDown={(e) => e.key === 'Enter' && saveEdit(analysis.id)}
-                          onBlur={() => setEditingId(null)}
-                        />
+                      <div className="flex flex-col gap-2 mb-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">{isHindi ? "फसल" : "Crop"}</label>
+                          <input
+                            value={editCrop}
+                            onChange={(e) => setEditCrop(e.target.value)}
+                            className="w-full px-2 py-1 border rounded text-caption bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder={isHindi ? "फसल का नाम" : "Crop Name"}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">{isHindi ? "रोग/स्थिति" : "Condition"}</label>
+                          <input
+                            value={editDisease}
+                            onChange={(e) => setEditDisease(e.target.value)}
+                            className="w-full px-2 py-1 border rounded text-headline bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                            autoFocus
+                            onKeyDown={(e) => e.key === 'Enter' && saveEdit(analysis.id)}
+                            placeholder={isHindi ? "रोग का नाम" : "Disease Name"}
+                          />
+                        </div>
+                        <div className="flex gap-1 mt-1">
+                          <Button size="sm" className="h-7 text-[10px] px-2" onClick={() => saveEdit(analysis.id)}>
+                            {isHindi ? "सहेजें" : "Save"}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2" onClick={() => setEditingId(null)}>
+                            {isHindi ? "रद्द करें" : "Cancel"}
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <h3 className="text-headline font-bold text-foreground line-clamp-1">

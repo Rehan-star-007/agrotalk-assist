@@ -10,6 +10,7 @@ const express = require('express');
 const multer = require('multer');
 const visionService = require('../services/visionService');
 const inferenceService = require('../services/inferenceService');
+const storageService = require('../services/storageService');
 
 const router = express.Router();
 

@@ -11,11 +11,12 @@ const express = require('express');
 const cors = require('cors');
 const analyzeRoute = require('./routes/analyze');
 const transcribeRoute = require('./routes/transcribe');
+const libraryRoute = require('./routes/library');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS for frontend (Vite may use 8080, 8081, 8082, etc. when ports are in use)
+// Enable CORS for frontend
 app.use(cors({
     origin: [
         'http://localhost:8080',
@@ -26,12 +27,13 @@ app.use(cors({
         'http://127.0.0.1:8081',
         'http://127.0.0.1:8082'
     ],
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies with increased size limit for images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -47,6 +49,16 @@ app.use('/weather', weatherRoute);
 
 // Voice transcription + advisory endpoint
 app.use('/transcribe', transcribeRoute);
+
+// Library CRUD endpoint
+app.use('/library', libraryRoute);
+
+// Chat History endpoint
+const chatRoute = require('./routes/chat');
+app.use('/chat', chatRoute);
+
+// Serve uploads as static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

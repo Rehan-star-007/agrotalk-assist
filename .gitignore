@@ -38,3 +38,8 @@ backend_py/__pycache__/
 *.pt
 *.weights
 *.h5
+
+# Local Data and Uploads
+backend/data/*
+!backend/data/agricultural_knowledge.json
+backend/uploads/*

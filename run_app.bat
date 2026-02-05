@@ -1,7 +1,7 @@
 @echo off
-TITLE AgroVoice Full Stack Application
+TITLE AgroTalk Full Stack Application
 echo ===================================================
-echo   Starting AgroVoice Application (Frontend + Backend)
+echo   Starting AgroTalk Application (Frontend + Backend)
 echo ===================================================
 
 echo [INFO] Starting Frontend (Vite)...
@@ -11,21 +11,17 @@ echo [INFO] Starting Node.js Backend...
 start cmd /k "npm run dev:backend"
 
 echo [INFO] Starting Backend (FastAPI)...
-cd backend_py
+cd /d "%~dp0backend_py"
 
-:: Check if venv exists
-if not exist "venv" (
-    echo [INFO] Virtual environment not found. Creating one...
-    python -m venv venv
-    
-    echo [INFO] Activating virtual environment...
-    call venv\Scripts\activate
-    
-    echo [INFO] Installing dependencies...
-    pip install -r requirements.txt
+:: Check for root .venv first, then local venv
+if exist "..\.venv\Scripts\activate.bat" (
+    echo [INFO] Found root virtual environment. Activating...
+    call "..\.venv\Scripts\activate.bat"
+) else if exist "venv\Scripts\activate.bat" (
+    echo [INFO] Found local virtual environment. Activating...
+    call venv\Scripts\activate.bat
 ) else (
-    echo [INFO] Activating virtual environment...
-    call venv\Scripts\activate
+    echo [WARNING] No virtual environment found. Running with system python...
 )
 
 echo.
@@ -40,3 +36,4 @@ if errorlevel 1 (
     echo [ERROR] Backend server failed to start.
     pause
 )
+

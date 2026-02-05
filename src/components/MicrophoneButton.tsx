@@ -1,11 +1,11 @@
-import { Mic, Loader2 } from "lucide-react";
+import { Mic, Loader2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MicrophoneButtonProps {
   isRecording: boolean;
   isProcessing: boolean;
   onClick: () => void;
-  size?: "default" | "large";
+  size?: "small" | "default" | "large";
 }
 
 export function MicrophoneButton({
@@ -14,13 +14,22 @@ export function MicrophoneButton({
   onClick,
   size = "large",
 }: MicrophoneButtonProps) {
-  const sizeClasses = size === "large" ? "w-20 h-20" : "w-16 h-16";
-  const iconSize = size === "large" ? 32 : 24;
+  const sizeClasses = {
+    small: "w-10 h-10",
+    default: "w-16 h-16",
+    large: "w-20 h-20"
+  }[size];
+
+  const iconSize = {
+    small: 18,
+    default: 24,
+    large: 32
+  }[size];
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Outer pulse ring - idle state */}
-      {!isRecording && !isProcessing && (
+      {/* Outer pulse ring - idle state (only for default/large) */}
+      {!isRecording && !isProcessing && size !== "small" && (
         <>
           <div
             className={cn(
@@ -37,17 +46,17 @@ export function MicrophoneButton({
           />
         </>
       )}
-      
+
       {/* Recording pulse ring - red */}
       {isRecording && (
         <div
           className={cn(
             "absolute rounded-full border-4 border-destructive animate-ripple",
-            size === "large" ? "w-24 h-24" : "w-20 h-20"
+            size === "large" ? "w-24 h-24" : (size === "default" ? "w-20 h-20" : "w-12 h-12")
           )}
         />
       )}
-      
+
       {/* Main button */}
       <button
         onClick={onClick}
@@ -66,8 +75,10 @@ export function MicrophoneButton({
       >
         {isProcessing ? (
           <Loader2 size={iconSize} className="animate-spin-smooth" />
+        ) : isRecording ? (
+          <Square size={iconSize} className="fill-current animate-pulse" />
         ) : (
-          <Mic size={iconSize} className={cn(isRecording && "animate-pulse")} />
+          <Mic size={iconSize} />
         )}
       </button>
     </div>
