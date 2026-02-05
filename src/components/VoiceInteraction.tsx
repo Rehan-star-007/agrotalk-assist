@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Volume2, VolumeX, ChevronDown, ChevronUp, Share2, BookmarkPlus, Mic, Sparkles, CheckCircle, CloudRain, Sun, AlertTriangle, UserCircle, Send, Square } from "lucide-react";
+import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Play, Pause, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
-import { WaveformVisualizer } from "./WaveformVisualizer";
 import { Button } from "./ui/button";
 import { transcribeAndGetAdvice, getTextAdvice, ConversationMessage } from "@/lib/apiClient";
 import type { AgriculturalAdvisory } from "@/lib/apiClient";
 import { getTranslation } from "@/lib/translations";
+import { ScrollArea } from "./ui/scroll-area";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -24,6 +24,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  rawContent?: string;
   timestamp: Date;
   condition?: string;
 }
@@ -51,6 +52,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [ttsAudio, setTtsAudio] = useState<HTMLAudioElement | null>(null);
+  const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
 
@@ -60,8 +62,10 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       window.speechSynthesis?.cancel();
       if (ttsAudio) {
         ttsAudio.pause();
+        ttsAudio.currentTime = 0;
       }
       setIsPlaying(false);
+      setCurrentPlayingId(null);
     }
   }, [isMuted, ttsAudio]);
 
@@ -111,6 +115,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       id: Date.now().toString(),
       role,
       content,
+      rawContent: content,
       timestamp: new Date(),
       condition
     };
@@ -346,48 +351,83 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     return text
       .replace(/\*\*(.*?)\*\*/g, '$1')
       .replace(/\*(.*?)\*/g, '$1')
-      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
       .replace(/#{1,6}\s+(.*)/g, '$1')
       .replace(/[-*]\s+/g, '')
       .replace(/[`](.*?)[`]/g, '$1')
       .trim();
   };
 
-  const speakResponse = (text: string) => {
+  // Enhanced TTS with all 5 language support
+  const speakText = (text: string, messageId?: string) => {
     if (isMuted) return;
+    
+    // Stop any current playback
+    window.speechSynthesis?.cancel();
+    if (ttsAudio) {
+      ttsAudio.pause();
+      ttsAudio.currentTime = 0;
+    }
+    
     if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
       const cleanedText = cleanMarkdown(text);
       const utterance = new SpeechSynthesisUtterance(cleanedText);
 
+      // All 5 supported languages
       const langMap: Record<string, string> = {
+        'en': 'en-IN',
         'hi': 'hi-IN',
         'ta': 'ta-IN',
         'te': 'te-IN',
         'mr': 'mr-IN',
-        'en': 'en-IN'
       };
 
       const targetLang = langMap[language] || 'en-IN';
       utterance.lang = targetLang;
 
+      // Get best voice for the language
       const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v =>
-        (v.lang.replace('_', '-').startsWith(targetLang)) &&
-        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Online'))
-      ) || voices.find(v => v.lang.startsWith(targetLang.split('-')[0]));
+      const langCode = targetLang.split('-')[0];
+      
+      const bestVoice = voices.find(v => {
+        const vLang = v.lang.replace('_', '-').toLowerCase();
+        return vLang.startsWith(langCode) && 
+          (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural'));
+      }) || voices.find(v => {
+        const vLang = v.lang.replace('_', '-').toLowerCase();
+        return vLang.startsWith(langCode);
+      }) || voices.find(v => {
+        const vLang = v.lang.replace('_', '-').toLowerCase();
+        return vLang.includes(langCode);
+      });
 
       if (bestVoice) {
         utterance.voice = bestVoice;
-        console.log(`🎙️ Using Browser Voice: ${bestVoice.name}`);
+        console.log(`🎙️ TTS: ${bestVoice.name} for ${language}`);
+      } else {
+        console.log(`⚠️ No voice for ${language}, using default`);
       }
 
       utterance.pitch = 1.0;
       utterance.rate = 1.0;
 
-      utterance.onend = () => setIsPlaying(false);
-      utterance.onerror = () => setIsPlaying(false);
+      utterance.onstart = () => {
+        setIsPlaying(true);
+        if (messageId) setCurrentPlayingId(messageId);
+      };
+      
+      utterance.onend = () => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+      };
+      
+      utterance.onerror = () => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+      };
+      
       setIsPlaying(true);
+      if (messageId) setCurrentPlayingId(messageId);
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -400,193 +440,359 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     if (audioBase64) {
       console.log('🔊 Playing natural TTS audio');
       const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
-      audio.onended = () => setIsPlaying(false);
+      audio.onended = () => {
+        setIsPlaying(false);
+        setCurrentPlayingId(null);
+      };
       audio.onerror = () => {
         console.warn('TTS audio failed, falling back to browser speech');
-        speakResponse(text);
+        speakText(text);
       };
       setTtsAudio(audio);
       setIsPlaying(true);
-      audio.play().catch(() => speakResponse(text));
+      audio.play().catch(() => speakText(text));
     } else {
-      speakResponse(text);
+      speakText(text);
     }
   };
 
-  const handlePlayAudio = () => {
-    if (!advisory?.recommendation) return;
-    if (isPlaying) {
+  const handlePlayMessage = (msgId: string, content: string) => {
+    if (currentPlayingId === msgId && isPlaying) {
       window.speechSynthesis?.cancel();
       if (ttsAudio) {
         ttsAudio.pause();
         ttsAudio.currentTime = 0;
       }
       setIsPlaying(false);
+      setCurrentPlayingId(null);
     } else {
-      if (ttsAudio) {
-        ttsAudio.currentTime = 0;
-        setIsPlaying(true);
-        ttsAudio.play().catch(() => speakResponse(advisory.recommendation));
-      } else {
-        speakResponse(advisory.recommendation);
-      }
+      speakText(content, msgId);
     }
   };
 
   if (!isOpen) return null;
 
+  const getPlaceholderText = () => {
+    const ph: Record<string, string> = {
+      en: "Ask about your crops...",
+      hi: "अपनी फसल के बारे में पूछें...",
+      ta: "உங்கள் பயிர்களைப் பற்றி கேளுங்கள்...",
+      te: "మీ పంటల గురించి అడగండి...",
+      mr: "तुमच्या पिकांबद्दल विचारा..."
+    };
+    return ph[language] || ph.en;
+  };
+
+  const getSuggestions = () => {
+    const s: Record<string, string[]> = {
+      en: ["Crop disease help", "Weather advice", "Pest control"],
+      hi: ["फसल रोग सहायता", "मौसम सलाह", "कीट नियंत्रण"],
+      ta: ["பயிர் நோய் உதவி", "வானிலை ஆலோசனை", "பூச்சி கட்டுப்பாடு"],
+      te: ["పంట వ్యాధి సహాయం", "వాతావరణ సలహా", "పురుగు నియంత్రణ"],
+      mr: ["पीक रोग मदत", "हवामान सल्ला", "कीड नियंत्रण"]
+    };
+    return s[language] || s.en;
+  };
+
   return (
     <div className={cn(
-      isIntegrated ? "flex flex-col h-full bg-background pb-24" : "fixed inset-0 z-50 bg-background animate-slide-in-right flex flex-col"
+      isIntegrated 
+        ? "flex flex-col h-full bg-gradient-to-b from-background via-background to-green-wash/30 pb-24" 
+        : "fixed inset-0 z-50 bg-gradient-to-b from-background via-background to-green-wash/30 animate-slide-in-right flex flex-col"
     )}>
-      <header className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
-        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95">
-          <X size={20} />
+      {/* Premium Glass Header */}
+      <header className="relative flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+        
+        <button onClick={onClose} className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 border border-border/50 shadow-sm hover:bg-muted hover:border-primary/30 transition-all active:scale-95">
+          <X size={18} className="text-muted-foreground" />
         </button>
-        <h1 className="text-headline font-bold text-foreground">
-          {t.title}
-        </h1>
+        
+        <div className="relative flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center shadow-lg shadow-primary/20">
+            <Leaf className="w-4 h-4 text-white" />
+          </div>
+          <h1 className="text-headline font-bold bg-gradient-to-r from-primary-dark to-primary bg-clip-text text-transparent">
+            {t.title}
+          </h1>
+        </div>
+        
         <button
           onClick={() => setIsMuted(!isMuted)}
           className={cn(
-            "w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95",
-            isMuted ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border hover:bg-muted text-primary"
+            "relative w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95",
+            isMuted 
+              ? "bg-destructive/10 border border-destructive/30 text-destructive" 
+              : "bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20"
           )}
-          title={isMuted ? "Unmute AI" : "Mute AI"}
         >
-          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
       </header>
 
-      {/* Chat Messages Container */}
-      <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-      >
-        {weatherAlert && chatMessages.length === 0 && (
-          <div className="w-full max-w-sm mx-auto mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 animate-fade-in shadow-sm">
-            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-bold text-amber-800">AgroGuard Alert</h3>
-              <p className="text-xs text-amber-700 mt-1 leading-relaxed">{weatherAlert}</p>
-            </div>
-          </div>
-        )}
-
-        {chatMessages.length === 0 && state === "idle" && (
-          <div className="text-center py-12 animate-fade-in">
-            <div className="relative w-32 h-32 mx-auto mb-6">
-              <div className="absolute inset-0 rounded-full bg-green-wash/50 animate-breathing" />
-              <div className="absolute inset-4 rounded-full bg-white shadow-apple-lg flex items-center justify-center border border-primary/10">
-                <UserCircle className="w-16 h-16 text-primary opacity-90" />
+      {/* Premium Chat Container */}
+      <ScrollArea ref={chatContainerRef} className="flex-1 overflow-y-auto">
+        <div className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+          {/* Weather Alert */}
+          {weatherAlert && chatMessages.length === 0 && (
+            <div className="w-full p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/50 flex items-start gap-3 animate-fade-in shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-800">{language === 'hi' ? 'मौसम चेतावनी' : 'Weather Alert'}</h3>
+                <p className="text-xs text-amber-700 mt-1 leading-relaxed">{weatherAlert}</p>
               </div>
             </div>
-            <p className="text-body text-muted-foreground max-w-xs mx-auto">{t.tapToSpeak}</p>
-            {errorMessage && (
-              <div className="bg-destructive/10 p-3 rounded-lg mt-4 max-w-xs mx-auto">
-                <p className="text-footnote text-destructive font-medium" role="alert">{errorMessage}</p>
-              </div>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* Chat Bubbles */}
-        {chatMessages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              "max-w-[85%] animate-fade-in",
-              msg.role === 'user' ? "ml-auto" : "mr-auto"
-            )}
-          >
-            {msg.role === 'user' ? (
-              <div className="bg-primary text-primary-foreground px-4 py-3 rounded-2xl rounded-br-md shadow-sm">
-                <p className="text-body">{msg.content}</p>
+          {/* Premium Empty State */}
+          {chatMessages.length === 0 && state === "idle" && (
+            <div className="text-center py-16 animate-fade-in">
+              <div className="relative w-36 h-36 mx-auto mb-8">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-pulse-glow" />
+                <div className="absolute inset-4 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 animate-breathing" style={{ animationDelay: '0.5s' }} />
+                <div className="absolute inset-8 rounded-full bg-gradient-to-br from-white to-green-50 shadow-xl border border-primary/20 flex items-center justify-center overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent" />
+                  <Bot className="w-10 h-10 text-primary relative z-10" />
+                </div>
+                <div className="absolute top-2 right-6 w-2 h-2 rounded-full bg-primary animate-ping" style={{ animationDuration: '2s' }} />
+                <div className="absolute bottom-6 left-2 w-1.5 h-1.5 rounded-full bg-primary/70 animate-ping" style={{ animationDuration: '3s', animationDelay: '1s' }} />
               </div>
-            ) : (
-              <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
-                {msg.condition && (
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
-                    <UserCircle className="w-4 h-4 text-primary" />
-                    <span className="text-caption font-bold uppercase tracking-widest text-primary">{msg.condition}</span>
+              
+              <h2 className="text-xl font-bold text-foreground mb-2">
+                {language === 'hi' ? 'मैं कैसे मदद करूं?' : language === 'ta' ? 'நான் எப்படி உதவ?' : language === 'te' ? 'నేను ఎలా సహాయం చేయగలను?' : language === 'mr' ? 'मी कशी मदत करू?' : 'How can I help?'}
+              </h2>
+              <p className="text-body text-muted-foreground max-w-sm mx-auto mb-6">{t.tapToSpeak}</p>
+              
+              <div className="flex flex-wrap justify-center gap-2 max-w-md mx-auto">
+                {getSuggestions().map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setTextInput(suggestion)}
+                    className="px-4 py-2 rounded-full bg-white/80 border border-primary/20 text-sm text-primary font-medium hover:bg-primary/10 hover:border-primary/40 transition-all active:scale-95 shadow-sm"
+                  >
+                    <Sparkles className="w-3 h-3 inline mr-1.5 opacity-70" />
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+              
+              {errorMessage && (
+                <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl mt-6 max-w-sm mx-auto">
+                  <p className="text-footnote text-destructive font-medium" role="alert">{errorMessage}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Premium Chat Bubbles */}
+          {chatMessages.map((msg, index) => (
+            <div
+              key={msg.id}
+              className={cn("animate-fade-in", msg.role === 'user' ? "flex justify-end" : "flex justify-start")}
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              {msg.role === 'user' ? (
+                <div className="max-w-[85%] group">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary-dark rounded-2xl rounded-br-md blur-sm opacity-30 group-hover:opacity-40 transition-opacity" />
+                    <div className="relative bg-gradient-to-br from-primary to-primary-dark text-white px-5 py-3.5 rounded-2xl rounded-br-md shadow-lg shadow-primary/20">
+                      <p className="text-body leading-relaxed">{msg.content}</p>
+                    </div>
                   </div>
-                )}
-                <div className="prose prose-sm text-foreground max-w-none leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {msg.content}
-                  </ReactMarkdown>
+                  <div className="flex items-center justify-end gap-2 mt-1.5 px-1">
+                    <User className="w-3 h-3 text-muted-foreground/50" />
+                    <span className="text-[10px] text-muted-foreground/70">
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-[90%] group">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20 shadow-sm">
+                      <Bot className="w-4 h-4 text-primary" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      {msg.condition && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 rounded-full bg-primary/10 border border-primary/20">
+                          <Sparkles className="w-3 h-3 text-primary" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{msg.condition}</span>
+                        </div>
+                      )}
+                      
+                      <div className="relative bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 overflow-hidden group-hover:shadow-md group-hover:border-primary/20 transition-all">
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/50 via-primary to-primary/50" />
+                        
+                        <div className="px-5 py-4">
+                          <div className="prose prose-sm text-foreground max-w-none leading-relaxed prose-headings:text-primary prose-strong:text-primary-dark prose-li:marker:text-primary">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-t border-border/30">
+                          <span className="text-[10px] text-muted-foreground">
+                            {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          
+                          <button
+                            onClick={() => handlePlayMessage(msg.id, msg.content)}
+                            disabled={isMuted}
+                            className={cn(
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95",
+                              currentPlayingId === msg.id && isPlaying
+                                ? "bg-primary text-white shadow-md shadow-primary/30"
+                                : "bg-white text-primary border border-primary/30 hover:bg-primary/10",
+                              isMuted && "opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            {currentPlayingId === msg.id && isPlaying ? (
+                              <>
+                                <Pause className="w-3 h-3" />
+                                <span>{language === 'hi' ? 'रोकें' : language === 'ta' ? 'நிறுத்து' : language === 'te' ? 'ఆపు' : language === 'mr' ? 'थांबवा' : 'Stop'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3 h-3" />
+                                <span>{language === 'hi' ? 'सुनें' : language === 'ta' ? 'கேளுங்கள்' : language === 'te' ? 'వినండి' : language === 'mr' ? 'ऐका' : 'Listen'}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Processing Indicator */}
+          {state === "processing" && (
+            <div className="flex justify-start animate-fade-in">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20 shadow-sm animate-pulse">
+                  <Bot className="w-4 h-4 text-primary" />
+                </div>
+                <div className="bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2.5 h-2.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-sm text-muted-foreground font-medium">{t.thinking}</span>
+                  </div>
                 </div>
               </div>
-            )}
-            <p className={cn(
-              "text-[10px] text-muted-foreground mt-1",
-              msg.role === 'user' ? "text-right" : "text-left"
-            )}>
-              {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-        ))}
+            </div>
+          )}
 
-        {/* Processing Indicator */}
-        {state === "processing" && (
-          <div className="max-w-[85%] mr-auto animate-fade-in">
-            <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          {/* Recording Indicator */}
+          {state === "recording" && (
+            <div className="flex justify-end animate-fade-in">
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/30 px-5 py-3.5 rounded-2xl rounded-br-md shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />
+                    <div className="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-50" />
+                  </div>
+                  <span className="text-sm text-primary font-semibold">{t.listening}</span>
+                  <div className="flex items-center gap-0.5 h-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1 bg-primary rounded-full animate-pulse"
+                        style={{ height: `${Math.random() * 12 + 8}px`, animationDelay: `${i * 100}ms`, animationDuration: '0.5s' }}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <span className="text-sm text-muted-foreground">{t.thinking}</span>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </ScrollArea>
 
-        {/* Recording Indicator */}
-        {state === "recording" && (
-          <div className="max-w-[85%] ml-auto animate-fade-in">
-            <div className="bg-primary/10 border border-primary/20 px-4 py-3 rounded-2xl rounded-br-md shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-sm text-primary font-medium">{t.listening}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Input Area */}
-      <div className="border-t border-border bg-background p-4">
-        <div className="flex items-center gap-3">
-          {/* Voice Button */}
-          <MicrophoneButton
-            isRecording={state === "recording"}
-            isProcessing={state === "processing"}
-            onClick={handleMicClick}
-            size="small"
-          />
-
-          {/* Text Input */}
-          <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
-            <input
-              type="text"
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              placeholder={language === 'hi' ? "संदेश टाइप करें..." : "Type a message..."}
-              className="flex-1 h-12 px-4 rounded-full bg-muted border border-border text-body placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-              disabled={state === "recording" || state === "processing"}
+      {/* Premium Input Area */}
+      <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-4 pb-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center gap-3">
+            <MicrophoneButton
+              isRecording={state === "recording"}
+              isProcessing={state === "processing"}
+              onClick={handleMicClick}
+              size="small"
             />
-            {textInput.trim() && (
+
+            <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder={getPlaceholderText()}
+                  className={cn(
+                    "w-full h-12 pl-5 pr-12 rounded-full",
+                    "bg-white border-2 border-border/50",
+                    "text-body placeholder:text-muted-foreground/60",
+                    "focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10",
+                    "transition-all duration-200 shadow-sm",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                  disabled={state === "recording" || state === "processing"}
+                />
+                
+                {textInput.trim() && (
+                  <button
+                    type="submit"
+                    disabled={!textInput.trim() || state === "recording" || state === "processing"}
+                    className={cn(
+                      "absolute right-1.5 top-1/2 -translate-y-1/2",
+                      "w-9 h-9 rounded-full",
+                      "bg-gradient-to-br from-primary to-primary-dark text-white",
+                      "flex items-center justify-center",
+                      "shadow-lg shadow-primary/30",
+                      "hover:shadow-xl hover:shadow-primary/40 hover:scale-105",
+                      "active:scale-95 transition-all duration-200",
+                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    )}
+                  >
+                    <Send size={16} className="ml-0.5" />
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+          
+          {!isMuted && (
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Volume2 className="w-3 h-3 text-primary/60" />
+              <span className="text-[10px] text-muted-foreground">
+                {language === 'en' && "Voice: English"}
+                {language === 'hi' && "आवाज़: हिंदी"}
+                {language === 'ta' && "குரல்: தமிழ்"}
+                {language === 'te' && "వాయిస్: తెలుగు"}
+                {language === 'mr' && "आवाज: मराठी"}
+              </span>
+            </div>
+          )}
+          
+          {chatMessages.length > 0 && state === "idle" && (
+            <div className="flex justify-center mt-2">
               <button
-                type="submit"
-                disabled={!textInput.trim() || state === "recording" || state === "processing"}
-                className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors active:scale-95 animate-fade-in"
+                onClick={() => setChatMessages([])}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors"
               >
-                <Send size={20} />
+                <RotateCcw className="w-3 h-3" />
+                {language === 'hi' ? 'नई बातचीत' : language === 'ta' ? 'புதிய அரட்டை' : language === 'te' ? 'కొత్త చాట్' : language === 'mr' ? 'नवीन गप्पा' : 'New Chat'}
               </button>
-            )}
-          </form>
+            </div>
+          )}
         </div>
       </div>
     </div>
