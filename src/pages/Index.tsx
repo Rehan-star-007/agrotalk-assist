@@ -5,19 +5,22 @@ import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { RecentQueryCard } from "@/components/RecentQueryCard";
-import { BottomNavigation } from "@/components/BottomNavigation";
+import { BottomNavigation, type NavTab } from "@/components/BottomNavigation";
+
 import { VoiceInteraction } from "@/components/VoiceInteraction";
 import { ImageAnalysis } from "@/components/ImageAnalysis";
 import { LibraryScreen } from "@/components/LibraryScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
+import { MarketPriceScreen } from "@/components/MarketPriceScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
+
 import { useLibrary } from "@/hooks/useLibrary";
 import { useChat } from "@/hooks/useChat";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
 
 import { getTranslation } from "@/lib/translations";
 
-type NavTab = "home" | "analyze" | "library" | "settings" | "assistant";
+
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
@@ -252,7 +255,11 @@ export default function Index() {
             onVoiceSpeedChange={setVoiceSpeed}
           />
         )}
+        {activeTab === "market" && (
+          <MarketPriceScreen language={language} />
+        )}
       </main>
+
 
       {/* Bottom Navigation */}
       <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />

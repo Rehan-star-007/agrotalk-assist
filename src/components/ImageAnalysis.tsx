@@ -25,7 +25,9 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
   const { addItem } = useLibrary();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
 
   const t = getTranslation('image', language);
   const tCommon = getTranslation('common', language);
@@ -40,6 +42,62 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
         performAnalysis(file);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      setIsCameraActive(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error("Camera error:", error);
+      toast.error(isHindi ? "कैमरा एक्सेस नहीं मिला" : "Camera access denied");
+      setIsCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      // Use the actual video dimensions
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setPreviewImage(dataUrl);
+
+        // Create a file from the blob to use existing analysis logic
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+            performAnalysis(file);
+          }
+        }, 'image/jpeg', 0.9);
+      }
+      stopCamera();
     }
   };
 
@@ -102,6 +160,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   };
 
   const resetAnalysis = () => {
+    stopCamera();
     setState("camera");
     setPreviewImage(null);
     setAnalysisResult(null);
@@ -126,6 +185,7 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   };
 
   const handleClose = () => {
+    stopCamera();
     resetAnalysis();
     onClose();
   };
@@ -168,38 +228,76 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
         {/* Camera State */}
         {state === "camera" && (
           <div className="flex flex-col items-center justify-center p-6 min-h-[60vh] animate-fade-in">
-            {/* Upload Area */}
+            {/* Upload/Camera Area */}
             <div
-              className="relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed border-primary bg-background flex flex-col items-center justify-center p-8 hover:bg-green-wash hover:border-primary/70 transition-all cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "relative w-full max-w-sm aspect-[4/3] rounded-apple-lg border-2 border-dashed flex flex-col items-center justify-center overflow-hidden transition-all",
+                isCameraActive ? "border-primary shadow-apple-lg" : "border-primary bg-background hover:bg-green-wash hover:border-primary/70 cursor-pointer"
+              )}
+              onClick={() => !isCameraActive && fileInputRef.current?.click()}
             >
-              <div className="w-16 h-16 rounded-full bg-green-wash flex items-center justify-center mb-4">
-                <Camera className="w-8 h-8 text-primary" />
-              </div>
-              <p className="text-body font-medium text-muted-foreground text-center">
-                {t.positionLeaf}
-              </p>
-              <p className="text-caption text-muted-foreground mt-2">
-                JPG, PNG (max 10MB)
-              </p>
+              {isCameraActive ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 pointer-events-none border-2 border-white/30 m-6 rounded-apple border-dashed" />
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-green-wash flex items-center justify-center mb-4">
+                    <Camera className="w-8 h-8 text-primary" />
+                  </div>
+                  <p className="text-body font-medium text-muted-foreground text-center px-4">
+                    {t.positionLeaf}
+                  </p>
+                  <p className="text-caption text-muted-foreground mt-2">
+                    JPG, PNG (max 10MB)
+                  </p>
+                </>
+              )}
+              <canvas ref={canvasRef} className="hidden" />
             </div>
 
             <div className="w-full max-w-sm mt-8 space-y-3">
-              <Button
-                onClick={() => cameraInputRef.current?.click()}
-                className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
-              >
-                <Camera className="mr-2 h-5 w-5" /> {t.takePhoto}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full h-14 text-body font-semibold rounded-apple border-2 border-border hover:bg-green-wash hover:border-primary/50 active:scale-[0.98] transition-all"
-              >
-                <Upload className="mr-2 h-5 w-5 text-primary" /> {t.uploadPhoto}
-              </Button>
+              {isCameraActive ? (
+                <>
+                  <Button
+                    onClick={capturePhoto}
+                    className="w-full h-14 text-body font-bold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
+                  >
+                    <div className="w-4 h-4 rounded-full border-2 border-white mr-2" />
+                    {isHindi ? "फोटो खींचें" : "Snap Photo"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={stopCamera}
+                    className="w-full h-12 text-muted-foreground font-medium"
+                  >
+                    {tCommon.cancel || (isHindi ? "रद्द करें" : "Cancel")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={startCamera}
+                    className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
+                  >
+                    <Camera className="mr-2 h-5 w-5" /> {t.takePhoto}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-14 text-body font-semibold rounded-apple border-2 border-border hover:bg-green-wash hover:border-primary/50 active:scale-[0.98] transition-all"
+                  >
+                    <Upload className="mr-2 h-5 w-5 text-primary" /> {t.uploadPhoto}
+                  </Button>
+                </>
+              )}
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelect} className="hidden" />
             </div>
           </div>
         )}

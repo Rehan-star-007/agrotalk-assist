@@ -212,4 +212,100 @@ async function generateSpeech(text, voice = 'nova') {
     }
 }
 
-module.exports = { getAgriAdvice, generateSpeech };
+/**
+ * Analyze mandi market prices using AI
+ * 
+ * @param {object} mandiData - The market record to analyze
+ * @param {string} language - Language code
+ */
+async function getMarketAnalysis(mandiData, language = 'en') {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+        console.error('❌ OPENROUTER_API_KEY missing');
+        return null;
+    }
+
+    const languageNames = {
+        'en': 'English',
+        'hi': 'Hindi',
+        'ta': 'Tamil',
+        'te': 'Telugu',
+        'mr': 'Marathi'
+    };
+    const targetLang = languageNames[language] || 'English';
+
+    if (!mandiData || !mandiData.modal_price) {
+        return { text: "Market price data is currently unavailable." };
+    }
+
+    try {
+        const { commodity, market, min_price, max_price, modal_price, arrival_date, district, state } = mandiData;
+
+        // Normalize to /kg (assuming input is /quintal as per Data.gov.in standard)
+        const modalPerKg = (parseFloat(modal_price) / 100).toFixed(2);
+        const minPerKg = (parseFloat(min_price) / 100).toFixed(2);
+        const maxPerKg = (parseFloat(max_price) / 100).toFixed(2);
+
+        const systemPrompt = `You are an agricultural market advisor. Use ONLY the provided mandi data to explain and analyze the market. NEVER guess, estimate, or hallucinate prices. If data is missing or empty, respond with: "Market price data is currently unavailable."
+        
+        OUTPUT RULES:
+        - Must be short, farmer-friendly, and neutral in tone.
+        - Generate a natural-language explanation in ${targetLang}.
+        - Include: 
+          1. Current price summary 
+          2. Trend interpretation (high / medium / low based on where modal price sits in range)
+          3. Basic selling advice (sell / wait / monitor)
+        - DO NOT fetch or mention external prices.`;
+
+        const userPrompt = `
+        MARKET DATA:
+        - Crop: ${commodity}
+        - Market: ${market}, ${district}, ${state}
+        - Date: ${arrival_date}
+        - Prices: ₹${modal_price}/quintal (₹${modalPerKg}/kg)
+        - Price Range: ₹${min_price} - ₹${max_price}/quintal (₹${minPerKg} - ₹${maxPerKg}/kg)
+        `;
+
+        console.log(`📊 Analyzing market data for ${commodity} in ${targetLang}...`);
+
+        const response = await fetch(OPENROUTER_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'HTTP-Referer': 'http://localhost:3000',
+                'X-Title': 'AgroTalk Assist',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.3,
+                max_tokens: 300
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error('❌ OpenRouter API Error (Market):', response.status, errText);
+            return null;
+        }
+
+        const data = await response.json();
+        if (data.choices && data.choices.length > 0) {
+            return {
+                text: data.choices[0].message.content,
+                model: data.model
+            };
+        }
+        return null;
+
+    } catch (error) {
+        console.error('❌ Market AI Exception:', error);
+        return null;
+    }
+}
+
+module.exports = { getAgriAdvice, generateSpeech, getMarketAnalysis };

@@ -361,14 +361,14 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   // Enhanced TTS with all 5 language support
   const speakText = (text: string, messageId?: string) => {
     if (isMuted) return;
-    
+
     // Stop any current playback
     window.speechSynthesis?.cancel();
     if (ttsAudio) {
       ttsAudio.pause();
       ttsAudio.currentTime = 0;
     }
-    
+
     if ("speechSynthesis" in window) {
       const cleanedText = cleanMarkdown(text);
       const utterance = new SpeechSynthesisUtterance(cleanedText);
@@ -388,10 +388,10 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       // Get best voice for the language
       const voices = window.speechSynthesis.getVoices();
       const langCode = targetLang.split('-')[0];
-      
+
       const bestVoice = voices.find(v => {
         const vLang = v.lang.replace('_', '-').toLowerCase();
-        return vLang.startsWith(langCode) && 
+        return vLang.startsWith(langCode) &&
           (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural'));
       }) || voices.find(v => {
         const vLang = v.lang.replace('_', '-').toLowerCase();
@@ -415,17 +415,17 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
         setIsPlaying(true);
         if (messageId) setCurrentPlayingId(messageId);
       };
-      
+
       utterance.onend = () => {
         setIsPlaying(false);
         setCurrentPlayingId(null);
       };
-      
+
       utterance.onerror = () => {
         setIsPlaying(false);
         setCurrentPlayingId(null);
       };
-      
+
       setIsPlaying(true);
       if (messageId) setCurrentPlayingId(messageId);
       window.speechSynthesis.speak(utterance);
@@ -496,33 +496,28 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
 
   return (
     <div className={cn(
-      isIntegrated 
-        ? "flex flex-col h-full bg-gradient-to-b from-background via-background to-green-wash/30 pb-24" 
+      isIntegrated
+        ? "flex flex-col h-full bg-gradient-to-b from-background via-background to-green-wash/30 pb-24"
         : "fixed inset-0 z-50 bg-gradient-to-b from-background via-background to-green-wash/30 animate-slide-in-right flex flex-col"
     )}>
       {/* Premium Glass Header */}
       <header className="relative flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
-        
+
         <button onClick={onClose} className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 border border-border/50 shadow-sm hover:bg-muted hover:border-primary/30 transition-all active:scale-95">
           <X size={18} className="text-muted-foreground" />
         </button>
-        
+
         <div className="relative flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center shadow-lg shadow-primary/20">
-            <Leaf className="w-4 h-4 text-white" />
-          </div>
-          <h1 className="text-headline font-bold bg-gradient-to-r from-primary-dark to-primary bg-clip-text text-transparent">
-            {t.title}
-          </h1>
+          {/* Header text and icon removed per user request */}
         </div>
-        
+
         <button
           onClick={() => setIsMuted(!isMuted)}
           className={cn(
             "relative w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95",
-            isMuted 
-              ? "bg-destructive/10 border border-destructive/30 text-destructive" 
+            isMuted
+              ? "bg-destructive/10 border border-destructive/30 text-destructive"
               : "bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20"
           )}
         >
@@ -559,17 +554,17 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                 <div className="absolute top-2 right-6 w-2 h-2 rounded-full bg-primary animate-ping" style={{ animationDuration: '2s' }} />
                 <div className="absolute bottom-6 left-2 w-1.5 h-1.5 rounded-full bg-primary/70 animate-ping" style={{ animationDuration: '3s', animationDelay: '1s' }} />
               </div>
-              
+
               <h2 className="text-xl font-bold text-foreground mb-2">
                 {language === 'hi' ? 'मैं कैसे मदद करूं?' : language === 'ta' ? 'நான் எப்படி உதவ?' : language === 'te' ? 'నేను ఎలా సహాయం చేయగలను?' : language === 'mr' ? 'मी कशी मदत करू?' : 'How can I help?'}
               </h2>
               <p className="text-body text-muted-foreground max-w-sm mx-auto mb-6">{t.tapToSpeak}</p>
-              
+
               <div className="flex flex-wrap justify-center gap-2 max-w-md mx-auto">
                 {getSuggestions().map((suggestion, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setTextInput(suggestion)}
+                    onClick={() => processResponse(suggestion)}
                     className="px-4 py-2 rounded-full bg-white/80 border border-primary/20 text-sm text-primary font-medium hover:bg-primary/10 hover:border-primary/40 transition-all active:scale-95 shadow-sm"
                   >
                     <Sparkles className="w-3 h-3 inline mr-1.5 opacity-70" />
@@ -577,7 +572,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                   </button>
                 ))}
               </div>
-              
+
               {errorMessage && (
                 <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl mt-6 max-w-sm mx-auto">
                   <p className="text-footnote text-destructive font-medium" role="alert">{errorMessage}</p>
@@ -614,7 +609,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                     <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20 shadow-sm">
                       <Bot className="w-4 h-4 text-primary" />
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       {msg.condition && (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 rounded-full bg-primary/10 border border-primary/20">
@@ -622,10 +617,10 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                           <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{msg.condition}</span>
                         </div>
                       )}
-                      
+
                       <div className="relative bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 overflow-hidden group-hover:shadow-md group-hover:border-primary/20 transition-all">
                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/50 via-primary to-primary/50" />
-                        
+
                         <div className="px-5 py-4">
                           <div className="prose prose-sm text-foreground max-w-none leading-relaxed prose-headings:text-primary prose-strong:text-primary-dark prose-li:marker:text-primary">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -633,12 +628,12 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                             </ReactMarkdown>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-t border-border/30">
                           <span className="text-[10px] text-muted-foreground">
                             {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          
+
                           <button
                             onClick={() => handlePlayMessage(msg.id, msg.content)}
                             disabled={isMuted}
@@ -746,7 +741,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                   )}
                   disabled={state === "recording" || state === "processing"}
                 />
-                
+
                 {textInput.trim() && (
                   <button
                     type="submit"
@@ -768,7 +763,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
               </div>
             </form>
           </div>
-          
+
           {!isMuted && (
             <div className="flex items-center justify-center gap-2 mt-3">
               <Volume2 className="w-3 h-3 text-primary/60" />
@@ -781,7 +776,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
               </span>
             </div>
           )}
-          
+
           {chatMessages.length > 0 && state === "idle" && (
             <div className="flex justify-center mt-2">
               <button

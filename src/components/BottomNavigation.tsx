@@ -1,7 +1,10 @@
-import { Home, Camera, BookOpen, Settings, User } from "lucide-react";
+import { Home, Camera, BookOpen, Settings, User, ShoppingBag } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
-type NavTab = "home" | "analyze" | "library" | "settings" | "assistant";
+export type NavTab = "home" | "analyze" | "library" | "settings" | "assistant" | "market";
+
+
 
 interface BottomNavigationProps {
   activeTab: NavTab;
@@ -11,11 +14,13 @@ interface BottomNavigationProps {
 export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationProps) {
   const tabs: { id: NavTab; icon: typeof Home; label: string }[] = [
     { id: "home", icon: Home, label: "Home" },
+    { id: "market", icon: ShoppingBag, label: "Market" },
     { id: "analyze", icon: Camera, label: "Analyze" },
     { id: "assistant", icon: User, label: "Assistant" },
     { id: "library", icon: BookOpen, label: "Library" },
     { id: "settings", icon: Settings, label: "Settings" },
   ];
+
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-apple border-t border-border shadow-nav">

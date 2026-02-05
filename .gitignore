@@ -33,6 +33,8 @@ backend_py/__pycache__/
 # Secrets
 .env
 .env.local
+.env.openrouter
+.env.market
 
 # Models
 *.pt
