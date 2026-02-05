@@ -99,7 +99,8 @@ export async function transcribeAndGetAdvice(
     language: string,
     weatherContext?: { temp: number; condition: number; humidity: number },
     conversationHistory: ConversationMessage[] = [],
-    useTts: boolean = true
+    useTts: boolean = true,
+    conversationId?: string
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending audio to backend for transcription...');
     console.log(`   Blob: ${audioBlob.type}, ${audioBlob.size} bytes`);
@@ -116,6 +117,10 @@ export async function transcribeAndGetAdvice(
 
         if (conversationHistory.length > 0) {
             formData.append('conversationHistory', JSON.stringify(conversationHistory));
+        }
+
+        if (conversationId) {
+            formData.append('conversationId', conversationId);
         }
 
         const response = await fetch(`${BACKEND_URL}/transcribe`, {
@@ -175,7 +180,8 @@ export async function getTextAdvice(
     language: string,
     weatherContext?: { temp: number; condition: number; humidity: number },
     conversationHistory: ConversationMessage[] = [],
-    useTts: boolean = true
+    useTts: boolean = true,
+    conversationId?: string
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending text to backend for inference...');
     console.log(`   History items: ${conversationHistory.length}`);
@@ -192,6 +198,10 @@ export async function getTextAdvice(
 
         if (conversationHistory.length > 0) {
             formData.append('conversationHistory', JSON.stringify(conversationHistory));
+        }
+
+        if (conversationId) {
+            formData.append('conversationId', conversationId);
         }
 
         const response = await fetch(`${BACKEND_URL}/transcribe`, {

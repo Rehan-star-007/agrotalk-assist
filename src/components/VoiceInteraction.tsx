@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Play, Pause, RotateCcw } from "lucide-react";
+import { X, Volume2, VolumeX, AlertTriangle, Send, Sparkles, Bot, User, Leaf, Play, Pause, RotateCcw, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "./MicrophoneButton";
 import { Button } from "./ui/button";
@@ -39,9 +39,11 @@ interface VoiceInteractionProps {
     condition: number;
     humidity: number;
   };
+  initialMessages?: ChatMessage[];
+  initialConversationId?: string;
 }
 
-export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weatherContext }: VoiceInteractionProps) {
+export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weatherContext, initialMessages, initialConversationId }: VoiceInteractionProps) {
   const [state, setState] = useState<VoiceState>("idle");
   const [isPlaying, setIsPlaying] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -50,11 +52,31 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [weatherAlert, setWeatherAlert] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialMessages || []);
+  const [conversationId, setConversationId] = useState<string>(initialConversationId || "");
   const [ttsAudio, setTtsAudio] = useState<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
+
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0 && conversationHistory.length === 0) {
+      const history = initialMessages.map(m => ({
+        role: m.role,
+        content: m.content
+      })).slice(-6);
+      setConversationHistory(history);
+    }
+  }, [initialMessages]);
+
+  useEffect(() => {
+    if (isOpen && !conversationId) {
+      // Start a new conversation session when the assistant is opened
+      const newId = `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+      setConversationId(newId);
+      console.log(`💬 Starting new chat session: ${newId}`);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     localStorage.setItem("agrovoice_muted", String(isMuted));
@@ -128,7 +150,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     setState("processing");
 
     try {
-      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true);
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId);
 
       if (result.success && result.advisory) {
         setTranscript(result.transcript || text);
@@ -282,7 +304,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
           }
 
           setState("processing");
-          const result = await transcribeAndGetAdvice(audioBlob, language, weatherContext, conversationHistory, true);
+          const result = await transcribeAndGetAdvice(audioBlob, language, weatherContext, conversationHistory, true, conversationId);
 
           if (result.success && result.advisory) {
             setTranscript(result.transcript || "");
@@ -749,15 +771,15 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                     className={cn(
                       "absolute right-1.5 top-1/2 -translate-y-1/2",
                       "w-9 h-9 rounded-full",
-                      "bg-gradient-to-br from-primary to-primary-dark text-white",
+                      "bg-primary text-primary-foreground",
                       "flex items-center justify-center",
-                      "shadow-lg shadow-primary/30",
-                      "hover:shadow-xl hover:shadow-primary/40 hover:scale-105",
+                      "shadow-md shadow-primary/20",
+                      "hover:bg-primary/90 hover:scale-105",
                       "active:scale-95 transition-all duration-200",
                       "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     )}
                   >
-                    <Send size={16} className="ml-0.5" />
+                    <ArrowUp size={18} strokeWidth={2.5} />
                   </button>
                 )}
               </div>

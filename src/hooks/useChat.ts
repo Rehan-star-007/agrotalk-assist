@@ -4,11 +4,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface ChatItem {
     id: string;
+    conversationId?: string;
     query: string;
     response: string;
     timestamp: string;
     type: 'voice' | 'text';
     weatherContext?: any;
+    messages?: Array<{ query: string; response: string; timestamp: string; id: string }>;
 }
 
 export function useChat() {

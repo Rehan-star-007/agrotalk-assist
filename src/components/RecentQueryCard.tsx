@@ -9,6 +9,7 @@ interface RecentQueryCardProps {
   cropType?: "wheat" | "rice" | "potato" | "tomato" | "apple" | "leaf" | "general";
   onPlay: (id: string) => void;
   isPlaying?: boolean;
+  onClick?: () => void;
 }
 
 const cropEmojis = {
@@ -29,6 +30,7 @@ export function RecentQueryCard({
   cropType = "general",
   onPlay,
   isPlaying = false,
+  onClick,
 }: RecentQueryCardProps) {
   const formatTime = (date: Date) => {
     const now = new Date();
@@ -44,6 +46,7 @@ export function RecentQueryCard({
 
   return (
     <div
+      onClick={onClick}
       className={cn(
         "group bg-card rounded-apple border border-border p-4",
         "shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5",

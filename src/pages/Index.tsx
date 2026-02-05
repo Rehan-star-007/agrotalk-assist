@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
-import { Camera, Leaf } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Camera, X, Volume2, VolumeX, Send, Sparkles, Bot, User, Play, Pause, RotateCcw, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { RecentQueryCard } from "@/components/RecentQueryCard";
 import { BottomNavigation, type NavTab } from "@/components/BottomNavigation";
-
 import { VoiceInteraction } from "@/components/VoiceInteraction";
 import { ImageAnalysis } from "@/components/ImageAnalysis";
 import { LibraryScreen } from "@/components/LibraryScreen";
@@ -17,10 +16,24 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { useLibrary } from "@/hooks/useLibrary";
 import { useChat } from "@/hooks/useChat";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
-
 import { getTranslation } from "@/lib/translations";
+import { getTextAdvice, ConversationMessage } from "@/lib/apiClient";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  condition?: string;
+}
 
+interface IWindow {
+  webkitSpeechRecognition: any;
+  SpeechRecognition: any;
+}
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
@@ -33,7 +46,28 @@ export default function Index() {
   const [isWeatherLoading, setIsWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
+  // Chat state
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const isHindi = language === "hi";
+  const [isChatMode, setIsChatMode] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [textInput, setTextInput] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string>("");
+  const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [ttsAudio, setTtsAudio] = useState<HTMLAudioElement | null>(null);
+
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const accumulatedTranscriptRef = useRef("");
+
   const t = getTranslation('home', language);
+  const tVoice = getTranslation('voice', language);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -42,9 +76,7 @@ export default function Index() {
       setIsWeatherLoading(true);
       const response = await fetch(`${API_BASE_URL}/weather?lat=${lat}&lon=${lon}`);
       const result = await response.json();
-
       if (result.success) {
-        console.log('Weather data fetched:', result.data);
         setWeatherData(result.data);
       } else {
         setWeatherError(result.error || 'Failed to fetch weather');
@@ -59,13 +91,8 @@ export default function Index() {
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          fetchWeather(position.coords.latitude, position.coords.longitude);
-        },
-        () => {
-          // Fallback to a default location (e.g., New Delhi)
-          fetchWeather(28.6139, 77.2090);
-        }
+        (position) => fetchWeather(position.coords.latitude, position.coords.longitude),
+        () => fetchWeather(28.6139, 77.2090) // Fallback to Delhi
       );
     } else {
       setWeatherError('Geolocation not supported');
@@ -73,21 +100,36 @@ export default function Index() {
     }
   }, []);
 
-  // Monitor online status
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
 
-  // Handle tab changes including analyze
+  useEffect(() => {
+    localStorage.setItem("agrovoice_muted", String(isMuted));
+    if (isMuted) {
+      window.speechSynthesis?.cancel();
+      if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio.currentTime = 0;
+      }
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
+    }
+  }, [isMuted, ttsAudio]);
+
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
   const handleTabChange = (tab: NavTab) => {
     if (tab === "analyze") {
       setIsImageOpen(true);
@@ -96,24 +138,217 @@ export default function Index() {
     }
   };
 
-  const handlePlayQuery = (id: string) => {
-    setPlayingId(playingId === id ? null : id);
-  };
-
-  // Move hooks to top level
   const { items: libraryItems, refresh: refreshLibrary } = useLibrary();
   const { history: chatHistory, fetchHistory: fetchChatHistory } = useChat();
 
-  // Refresh chat history when tab becomes active
   useEffect(() => {
-    if (activeTab === 'home') {
+    if (activeTab === 'home' && !isChatMode) {
       fetchChatHistory();
     }
-  }, [activeTab]);
+  }, [activeTab, isChatMode]);
 
-  // Home Screen Content
+  const addMessage = (role: 'user' | 'assistant', content: string, condition?: string) => {
+    const newMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role,
+      content,
+      timestamp: new Date(),
+      condition
+    };
+    setChatMessages(prev => [...prev, newMsg]);
+  };
+
+  const cleanMarkdown = (text: string) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/#{1,6}\s+(.*)/g, '$1')
+      .replace(/[-*]\s+/g, '')
+      .replace(/[`](.*?)[`]/g, '$1')
+      .trim();
+  };
+
+  const speakText = (text: string, messageId?: string) => {
+    if (isMuted) return;
+    window.speechSynthesis?.cancel();
+    if (ttsAudio) {
+      ttsAudio.pause();
+      ttsAudio.currentTime = 0;
+    }
+
+    if ("speechSynthesis" in window) {
+      const cleanedText = cleanMarkdown(text);
+      const utterance = new SpeechSynthesisUtterance(cleanedText);
+      const langMap: Record<string, string> = {
+        'en': 'en-IN', 'hi': 'hi-IN', 'ta': 'ta-IN', 'te': 'te-IN', 'mr': 'mr-IN'
+      };
+      utterance.lang = langMap[language] || 'en-IN';
+
+      const voices = window.speechSynthesis.getVoices();
+      const langCode = utterance.lang.split('-')[0];
+      const bestVoice = voices.find(v => v.lang.replace('_', '-').toLowerCase().startsWith(langCode));
+      if (bestVoice) utterance.voice = bestVoice;
+
+      utterance.onstart = () => { setIsPlaying(true); if (messageId) setCurrentPlayingId(messageId); };
+      utterance.onend = () => { setIsPlaying(false); setCurrentPlayingId(null); };
+      utterance.onerror = () => { setIsPlaying(false); setCurrentPlayingId(null); };
+
+      setIsPlaying(true);
+      if (messageId) setCurrentPlayingId(messageId);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const playResponse = (text: string, audioBase64?: string) => {
+    if (isMuted) return;
+    if (audioBase64) {
+      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+      audio.onended = () => { setIsPlaying(false); setCurrentPlayingId(null); };
+      audio.onerror = () => speakText(text);
+      setTtsAudio(audio);
+      setIsPlaying(true);
+      audio.play().catch(() => speakText(text));
+    } else {
+      speakText(text);
+    }
+  };
+
+  const processResponse = async (text: string) => {
+    if (!conversationId) {
+      const newId = `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+      setConversationId(newId);
+    }
+
+    addMessage('user', text);
+    setIsProcessing(true);
+
+    try {
+      const weatherContext = weatherData ? {
+        temp: weatherData.current.temperature_2m,
+        condition: weatherData.current.weather_code,
+        humidity: weatherData.current.relative_humidity_2m
+      } : undefined;
+
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId);
+
+      if (result.success && result.advisory) {
+        addMessage('assistant', result.advisory.recommendation, result.advisory.condition);
+        setConversationHistory(prev => [
+          ...prev,
+          { role: 'user' as const, content: text },
+          { role: 'assistant' as const, content: result.advisory!.recommendation }
+        ].slice(-6));
+        setTimeout(() => playResponse(result.advisory!.recommendation, result.audio), 300);
+      }
+    } catch (e) {
+      console.error("Chat error:", e);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleTextSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!textInput.trim()) return;
+    setIsChatMode(true);
+    const text = textInput.trim();
+    setTextInput("");
+    await processResponse(text);
+  };
+
+  const handleMicClick = async () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        const finalPayload = textInput.trim();
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+        setIsRecording(false);
+        if (finalPayload) {
+          setIsChatMode(true);
+          setTextInput("");
+          await processResponse(finalPayload);
+        }
+      }
+      return;
+    }
+
+    const WindowObj = window as unknown as IWindow;
+    const Recognition = WindowObj.webkitSpeechRecognition || WindowObj.SpeechRecognition;
+
+    if (Recognition) {
+      try {
+        const recognition = new Recognition();
+        const langMap: Record<string, string> = {
+          'hi': 'hi-IN', 'ta': 'ta-IN', 'te': 'te-IN', 'mr': 'mr-IN', 'en': 'en-US'
+        };
+        recognition.lang = langMap[language] || 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        accumulatedTranscriptRef.current = "";
+
+        recognition.onstart = () => setIsRecording(true);
+
+        recognition.onresult = (event: any) => {
+          let interimTranscript = "";
+          let finalChunk = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalChunk += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          if (finalChunk) {
+            accumulatedTranscriptRef.current += finalChunk + " ";
+          }
+          setTextInput(accumulatedTranscriptRef.current + interimTranscript);
+        };
+
+        recognition.onend = () => setIsRecording(false);
+        recognition.onerror = () => setIsRecording(false);
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (e) {
+        console.error("Speech recognition error:", e);
+      }
+    }
+  };
+
+  const handlePlayMessage = (msgId: string, content: string) => {
+    if (currentPlayingId === msgId && isPlaying) {
+      window.speechSynthesis?.cancel();
+      if (ttsAudio) { ttsAudio.pause(); ttsAudio.currentTime = 0; }
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
+    } else {
+      speakText(content, msgId);
+    }
+  };
+
+  const exitChat = () => {
+    setIsChatMode(false);
+    setChatMessages([]);
+    setConversationHistory([]);
+    setConversationId("");
+    setTextInput("");
+    window.speechSynthesis?.cancel();
+  };
+
+  const getPlaceholderText = () => {
+    const ph: Record<string, string> = {
+      en: "Ask about your crops...",
+      hi: "अपनी फसल के बारे में पूछें...",
+      ta: "உங்கள் பயிர்களைப் பற்றி கேளுங்கள்...",
+      te: "మీ పంటల గురించి అడగండి...",
+      mr: "तुमच्या पिकांबद्दल विचारा..."
+    };
+    return ph[language] || ph.en;
+  };
+
+  // Home Screen with integrated chat
   const renderHomeScreen = () => {
-    // Combine and sort recent items
     const allItems = [
       ...libraryItems.map(item => ({
         id: item.id,
@@ -135,28 +370,181 @@ export default function Index() {
 
     const recentQueries = allItems.slice(0, 3);
 
+    if (isChatMode) {
+      // DM-style chat interface
+      return (
+        <div className="flex flex-col h-full bg-background pb-24">
+          {/* Chat Header with mute and exit */}
+          <header className="relative flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
+            <button onClick={exitChat} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 border border-border/50 shadow-sm hover:bg-muted transition-all active:scale-95">
+              <X size={18} className="text-muted-foreground" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <img src="/logo.svg" alt="AgroTalk" className="w-8 h-8 rounded-full" />
+              <h1 className="text-headline font-bold text-primary">
+                AgroTalk
+              </h1>
+            </div>
+
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className={cn(
+                "w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95",
+                isMuted ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-primary/10 border border-primary/30 text-primary"
+              )}
+            >
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+          </header>
+
+          {/* Chat Messages */}
+          <ScrollArea ref={chatContainerRef} className="flex-1 overflow-y-auto">
+            <div className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+              {chatMessages.map((msg, index) => (
+                <div
+                  key={msg.id}
+                  className={cn("animate-fade-in", msg.role === 'user' ? "flex justify-end" : "flex justify-start")}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  {msg.role === 'user' ? (
+                    <div className="max-w-[85%] group">
+                      <div className="bg-primary text-white px-5 py-3.5 rounded-2xl rounded-br-md shadow-lg">
+                        <p className="text-body leading-relaxed">{msg.content}</p>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 mt-1.5 px-1">
+                        <User className="w-3 h-3 text-muted-foreground/50" />
+                        <span className="text-[10px] text-muted-foreground/70">
+                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="max-w-[90%] group">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white flex items-center justify-center border border-border/50 shadow-sm overflow-hidden p-1">
+                          <img src="/logo.svg" alt="AgroTalk" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {msg.condition && (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 rounded-full bg-primary/10 border border-primary/20">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{msg.condition}</span>
+                            </div>
+                          )}
+                          <div className="relative bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 overflow-hidden">
+                            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/50 via-primary to-primary/50" />
+                            <div className="px-5 py-4">
+                              <div className="prose prose-sm text-foreground max-w-none leading-relaxed">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-t border-border/30">
+                              <span className="text-[10px] text-muted-foreground">
+                                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <button
+                                onClick={() => handlePlayMessage(msg.id, msg.content)}
+                                disabled={isMuted}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95",
+                                  currentPlayingId === msg.id && isPlaying
+                                    ? "bg-primary text-white shadow-md"
+                                    : "bg-white text-primary border border-primary/30 hover:bg-primary/10",
+                                  isMuted && "opacity-50 cursor-not-allowed"
+                                )}
+                              >
+                                {currentPlayingId === msg.id && isPlaying ? <><Pause className="w-3 h-3" /><span>Stop</span></> : <><Play className="w-3 h-3" /><span>Listen</span></>}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {isProcessing && (
+                <div className="flex justify-start animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white flex items-center justify-center border border-border/50 shadow-sm overflow-hidden p-1 animate-pulse">
+                      <img src="/logo.svg" alt="AgroTalk" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-2.5 h-2.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-sm text-muted-foreground font-medium">{tVoice.thinking}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Chat Input */}
+          <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-4 pb-6">
+            <div className="max-w-2xl mx-auto flex items-center gap-3">
+              <button
+                onClick={handleMicClick}
+                className={cn(
+                  "w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95",
+                  isRecording
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-primary/10 text-primary hover:bg-primary/20"
+                )}
+              >
+                <Mic size={20} />
+              </button>
+              <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder={getPlaceholderText()}
+                    className="w-full h-12 pl-5 pr-12 rounded-full bg-white border-2 border-border/50 text-body focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all"
+                    disabled={isProcessing}
+                  />
+                  {textInput.trim() && (
+                    <button
+                      type="submit"
+                      disabled={isProcessing}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary-dark text-white flex items-center justify-center shadow-lg active:scale-95"
+                    >
+                      <Send size={16} />
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default home screen with input box
     return (
       <div className="flex flex-col flex-1 pb-32 bg-background">
-        {/* Header content unchanged... */}
         <header className="px-5 pt-8 pb-4 max-w-lg mx-auto w-full">
           <div className="flex items-center justify-between mb-8">
             <ConnectionStatus isOnline={isOnline} />
-            <LanguageSelector
-              selectedLanguage={language}
-              onLanguageChange={setLanguage}
-            />
+            <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} />
           </div>
 
-          {/* Hero Section */}
+          {/* Hero Section with Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-wash mb-4">
-              <Leaf className="w-8 h-8 text-primary" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-wash mb-4 overflow-hidden">
+              <img src="/logo.svg" alt="AgroTalk" className="w-16 h-16" />
             </div>
             <h1 className="text-title-lg font-bold text-foreground">{t.greeting}</h1>
             <p className="text-body text-muted-foreground mt-2">{t.greetingSubtext}</p>
           </div>
 
-          {/* Weather Dashboard */}
           <WeatherDashboard
             data={weatherData}
             loading={isWeatherLoading}
@@ -165,21 +553,45 @@ export default function Index() {
           />
         </header>
 
-        {/* Main Microphone Button */}
-        <div className="flex flex-col items-center justify-center py-6 max-w-lg mx-auto w-full">
-          <MicrophoneButton
-            isRecording={false}
-            isProcessing={false}
-            onClick={() => setActiveTab("assistant")}
-            size="large"
-          />
-          <p className="text-muted-foreground mt-6 text-subhead font-medium">{t.tapToSpeak}</p>
+        {/* Chat Input Box */}
+        <div className="px-5 py-6 max-w-lg mx-auto w-full">
+          <form onSubmit={handleTextSubmit} className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleMicClick}
+              className={cn(
+                "w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95",
+                isRecording
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-primary text-white shadow-green"
+              )}
+            >
+              <Mic size={24} />
+            </button>
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder={getPlaceholderText()}
+                className="w-full h-14 pl-5 pr-14 rounded-full bg-card border-2 border-border shadow-apple-sm text-body focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all"
+              />
+              {textInput.trim() && (
+                <button
+                  type="submit"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-dark text-white flex items-center justify-center shadow-lg active:scale-95"
+                >
+                  <Send size={18} />
+                </button>
+              )}
+            </div>
+          </form>
+          <p className="text-center text-muted-foreground mt-4 text-subhead">{t.tapToSpeak}</p>
 
           {/* Camera Button */}
           <button
             onClick={() => setIsImageOpen(true)}
-            className="mt-6 inline-flex items-center gap-3 px-6 py-3 rounded-full bg-card border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
-            aria-label={t.scanCrop}
+            className="mt-6 w-full inline-flex items-center justify-center gap-3 px-6 py-4 rounded-full bg-card border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all active:scale-95"
           >
             <Camera size={22} className="text-primary" />
             <span className="font-semibold text-foreground">{t.scanCrop}</span>
@@ -187,7 +599,7 @@ export default function Index() {
         </div>
 
         {/* Recent Queries */}
-        <section className="px-5 mt-8 max-w-lg mx-auto w-full">
+        <section className="px-5 mt-4 max-w-lg mx-auto w-full">
           <h2 className="text-headline font-bold text-foreground mb-4">{t.recentQueries}</h2>
           <div className="space-y-3">
             {recentQueries.length > 0 ? (
@@ -199,8 +611,8 @@ export default function Index() {
                   response={item.response}
                   timestamp={item.timestamp}
                   cropType={item.cropType}
-                  onPlay={handlePlayQuery}
-                  isPlaying={playingId === item.id}
+                  onPlay={() => { }}
+                  isPlaying={false}
                 />
               ))
             ) : (
@@ -216,62 +628,26 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      {/* Offline Banner */}
       {!isOnline && <OfflineBanner language={language} />}
 
-      {/* Main Content */}
-      <main className={cn(
-        "flex-1 flex flex-col",
-        !isOnline ? "pt-14" : ""
-      )}>
+      <main className={cn("flex-1 flex flex-col", !isOnline ? "pt-14" : "", isChatMode && activeTab === "home" ? "h-screen" : "")}>
         {activeTab === "home" && renderHomeScreen()}
-        {activeTab === "assistant" && (
-          <div className="animate-fade-in flex-1">
-            <VoiceInteraction
-              isOpen={true}
-              onClose={() => setActiveTab("home")}
-              language={language}
-              isIntegrated={true}
-              weatherContext={weatherData ? {
-                temp: weatherData.current.temperature_2m,
-                condition: weatherData.current.weather_code,
-                humidity: weatherData.current.relative_humidity_2m
-              } : undefined}
-            />
-          </div>
-        )}
         {activeTab === "library" && (
-          <LibraryScreen
-            language={language}
-            weatherData={weatherData}
-            isWeatherLoading={isWeatherLoading}
-          />
+          <LibraryScreen language={language} weatherData={weatherData} isWeatherLoading={isWeatherLoading} />
         )}
         {activeTab === "settings" && (
-          <SettingsScreen
-            language={language}
-            onLanguageChange={setLanguage}
-            voiceSpeed={voiceSpeed}
-            onVoiceSpeedChange={setVoiceSpeed}
-          />
+          <SettingsScreen language={language} onLanguageChange={setLanguage} voiceSpeed={voiceSpeed} onVoiceSpeedChange={setVoiceSpeed} />
         )}
         {activeTab === "market" && (
           <MarketPriceScreen language={language} />
         )}
       </main>
 
+      {!isChatMode && <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />}
 
-      {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-
-
-      {/* Image Analysis Modal */}
       <ImageAnalysis
         isOpen={isImageOpen}
-        onClose={() => {
-          setIsImageOpen(false);
-          refreshLibrary();
-        }}
+        onClose={() => { setIsImageOpen(false); refreshLibrary(); }}
         language={language}
       />
     </div>

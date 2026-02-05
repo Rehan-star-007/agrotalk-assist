@@ -43,51 +43,26 @@ async function getAgriAdvice(userQuery, weatherContext, imageBuffer = null, mime
     const targetLang = languageNames[language] || 'English';
 
     try {
-        // Enhanced System Prompt with formatting and dynamic knowledge
-        let systemPrompt = `You are AgroBot, an expert agricultural assistant with a warm, conversational personality.
-
-CORE IDENTITY:
-- You are a helpful farming companion who can advise on ANY crop, plant, vegetable, or fruit.
-- You have comprehensive knowledge about all agricultural topics worldwide.
-- You speak like a friendly expert, not a textbook.
-
-RESPONSE FORMATTING (CRITICAL):
-- Use **bold** for key terms and important words
-- Use bullet points (-) for lists
-- Keep responses concise: 50-100 words max
-- Structure with clear sections if needed
-- NEVER start with "Certainly" or "Here is" - just dive into the advice
-
-LANGUAGE RULE: 
-You MUST respond in ${targetLang}. Even if the query is in another language, respond in ${targetLang}.
-
-CONTEXT AWARENESS:
-- If the user asks a follow-up like "why?" or "explain more", refer to your previous answer.
-- Remember what crop or topic was discussed in this conversation.
-
-AGRICULTURAL KNOWLEDGE:
-- You can advise on ANY crop: common (potato, tomato) or exotic (dragon fruit, kiwi, avocado, passion fruit, etc.)
-- Cover watering, soil, pests, diseases, harvesting, organic methods, and more
-- Give practical, actionable advice`;
+        // Human AI prompt for quick chat
+        let systemPrompt = `You are AgroTalk, a friendly farming buddy. 
+        
+        RULES:
+        1. Speak naturally like a friend. 
+        2. Keep it VERY CONCISE: Max 2-3 sentences.
+        3. NO MARKDOWN: No bold (**), no headers (#), no bullet points. Plain text ONLY.
+        4. Use contractions (it's, you're).
+        5. Respond ONLY in ${targetLang}.`;
 
         if (weatherContext) {
-            systemPrompt += `
-
-CURRENT LOCAL WEATHER:
-- Temperature: ${weatherContext.temp}°C
-- Condition Code: ${weatherContext.condition}
-- Humidity: ${weatherContext.humidity}%
-
-WEATHER-AWARE ADVICE: Consider this weather when giving advice. Warn against spraying pesticides in rain (codes 50-99). Suggest extra watering if hot (>30°C).`;
+            systemPrompt += `\nWeather: ${weatherContext.temp}°C, humidity ${weatherContext.humidity}%. Give advice considering this.`;
         }
 
         const messages = [
             { role: 'system', content: systemPrompt }
         ];
 
-        // Add conversation history for context
+        // Context
         if (conversationHistory && conversationHistory.length > 0) {
-            // Keep last 6 messages for context (3 exchanges)
             const recentHistory = conversationHistory.slice(-6);
             for (const msg of recentHistory) {
                 messages.push({
@@ -97,15 +72,11 @@ WEATHER-AWARE ADVICE: Consider this weather when giving advice. Warn against spr
             }
         }
 
-        // Construct User Message
-        const userContent = [];
-
-        userContent.push({
+        const userContent = [{
             type: 'text',
-            text: userQuery || "Analyze this crop situation."
-        });
+            text: userQuery || "Analyze this."
+        }];
 
-        // Add image if present
         if (imageBuffer) {
             const base64Image = imageBuffer.toString('base64');
             userContent.push({
@@ -121,7 +92,7 @@ WEATHER-AWARE ADVICE: Consider this weather when giving advice. Warn against spr
             content: userContent
         });
 
-        console.log(`🤖 Sending ${targetLang} request to OpenRouter (${conversationHistory.length} history items)...`);
+        console.log(`🤖 Sending ${targetLang} request (max 180 tokens)...`);
 
         const response = await fetch(OPENROUTER_URL, {
             method: 'POST',
@@ -134,30 +105,28 @@ WEATHER-AWARE ADVICE: Consider this weather when giving advice. Warn against spr
             body: JSON.stringify({
                 model: MODEL,
                 messages: messages,
-                temperature: 0.7,
-                max_tokens: 500
+                temperature: 0.8,
+                max_tokens: 180
             })
         });
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error('❌ OpenRouter API Error:', response.status, errText);
+            console.error('❌ OpenRouter Error:', response.status, errText);
             return null;
         }
 
         const data = await response.json();
-
         if (data.choices && data.choices.length > 0) {
             return {
                 text: data.choices[0].message.content,
                 model: data.model
             };
         }
-
         return null;
 
     } catch (error) {
-        console.error('❌ AI Service Exception:', error);
+        console.error('❌ AI Service Error:', error);
         return null;
     }
 }
@@ -170,7 +139,7 @@ WEATHER-AWARE ADVICE: Consider this weather when giving advice. Warn against spr
  * @param {string} voice - Voice name (ignored, handled by Python backend mapping)
  * @returns {Buffer|null} - Audio buffer (mp3) or null on failure
  */
-async function generateSpeech(text, voice = 'nova') {
+async function generateSpeech(text, language = 'en', gender = 'male') {
     // Clean text for TTS (remove markdown)
     const cleanText = text
         .replace(/\*\*/g, '')
@@ -189,19 +158,19 @@ async function generateSpeech(text, voice = 'nova') {
             },
             body: JSON.stringify({
                 text: cleanText.slice(0, 4000), // Max chars
-                language: 'en', // You can pass language if available, defaulting to en
-                gender: 'male'
+                language: language,
+                gender: gender
             })
         });
 
         if (!response.ok) {
-            console.warn(`⚠️ Python TTS failed (${response.status}). Is backend_py running with edge-tts installed?`);
+            console.warn(`⚠️ Python TTS failed(${response.status}).Is backend_py running with edge - tts installed ? `);
             return null;
         }
 
         const data = await response.json();
         if (data.success && data.audio) {
-            console.log(`✅ Generated TTS audio (${data.audio.length} bytes base64)`);
+            console.log(`✅ Generated TTS audio(${data.audio.length} bytes base64)`);
             return Buffer.from(data.audio, 'base64');
         }
         return null;

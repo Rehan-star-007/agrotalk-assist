@@ -34,17 +34,16 @@ export function LanguageSelector({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-full",
-          "bg-card border border-border shadow-apple-sm",
+          "flex items-center justify-center p-2 rounded-full",
+          "bg-card border border-border/50 shadow-apple-sm",
           "hover:bg-muted transition-colors",
           "focus:outline-none focus:ring-2 focus:ring-primary/30",
-          "min-h-touch"
+          "w-10 h-10"
         )}
         aria-label="Select language"
         aria-expanded={isOpen}
       >
-        <span className="text-xl">{currentLang.flag}</span>
-        <Globe size={18} className="text-muted-foreground" />
+        <Globe size={20} className="text-muted-foreground" />
       </button>
 
       {isOpen && (

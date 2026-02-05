@@ -32,7 +32,7 @@ export interface VisionAnalysisResult {
 /**
  * Analyzes an image by sending it to the Python YOLO backend.
  */
-export async function analyzeImage(imageFile: File): Promise<VisionAnalysisResult> {
+export async function analyzeImage(imageFile: File, mode: "yolo" | "nvidia" = "yolo", language: string = "en"): Promise<VisionAnalysisResult> {
   try {
     // Convert file to base64
     const base64Image = await new Promise<string>((resolve, reject) => {
@@ -46,7 +46,7 @@ export async function analyzeImage(imageFile: File): Promise<VisionAnalysisResul
     // Assuming backend is running on port 8000
     const BACKEND_URL = "http://localhost:8000/api/analyze";
 
-    console.log("🚀 Sending image to Python YOLO backend:", BACKEND_URL);
+    console.log(`🚀 Sending image to Python backend (${mode}):`, BACKEND_URL);
 
     const response = await fetch(BACKEND_URL, {
       method: "POST",
@@ -55,7 +55,8 @@ export async function analyzeImage(imageFile: File): Promise<VisionAnalysisResul
       },
       body: JSON.stringify({
         image: base64Image,
-        language: "en" // Default, can be passed as arg
+        language: language,
+        mode: mode
       })
     });
 

@@ -13,15 +13,14 @@ from models.yolo_detector import PlantDiseaseDetector
 from utils.image_processing import decode_base64_image, preprocess_image
 from utils.visualization import process_and_visualize
 from services.tts_service import TTSService
-import io
-import base64
+from services.nvidia_vision import NvidiaVisionService
 import io
 import base64
 
 app = FastAPI(
     title="AgroVoice Disease Detection API",
-    description="Plant disease detection using YOLOv8 model",
-    version="1.0.0",
+    description="Plant disease detection using General (YOLO) or Farmer Assist (NVIDIA) modes",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -33,11 +32,13 @@ app.add_middleware(
 )
 
 detector: Optional[PlantDiseaseDetector] = None
+nvidia_service: Optional[NvidiaVisionService] = None
 
 class AnalyzeRequest(BaseModel):
     image: str
     cropType: Optional[str] = None
     language: Optional[str] = "en"
+    mode: Optional[str] = "yolo" # "yolo" or "nvidia"
 
 class TTSRequest(BaseModel):
     text: str
@@ -49,25 +50,31 @@ class AnalyzeResponse(BaseModel):
     analysis: dict
     processed_image: Optional[str] = None
     timestamp: str
+    mode: Optional[str] = "yolo"
 
 @app.on_event("startup")
 async def startup_event():
-    global detector
+    global detector, nvidia_service, tts_service
     print("🚀 Starting AgroVoice Disease Detection API...")
+    
     print("📦 Loading YOLO model...")
     model_path = os.environ.get("MODEL_PATH", None)
     detector = PlantDiseaseDetector(model_path=model_path)
-    # Initialize TTS Service
-    global tts_service
+    
+    print("🧠 Initializing NVIDIA Vision Service...")
+    nvidia_service = NvidiaVisionService()
+    
+    print("🎤 Initialize TTS Service...")
     tts_service = TTSService()
+    
     print("✅ Server ready!")
 
 @app.get("/")
 async def health_check():
     return {
         "status": "healthy",
-        "model": "YOLOv8",
-        "model_loaded": detector is not None and detector.model is not None,
+        "yolo_loaded": detector is not None and detector.model is not None,
+        "nvidia_ready": nvidia_service is not None and nvidia_service.client is not None,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -76,22 +83,43 @@ async def model_info():
     if detector is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     return {
-        "model_type": "YOLOv8 Dual-Stage (AI + Heuristic)",
+        "model_type": "General + Farmer Assist (Dual Mode)",
         "num_classes": len(detector.TARGET_CLASSES),
         "target_classes": detector.TARGET_CLASSES,
+        "nvidia_model": "meta/llama-3.2-90b-vision-instruct"
     }
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_image(request: AnalyzeRequest):
-    global detector
-    if detector is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    global detector, nvidia_service
     
     if not request.image:
         raise HTTPException(status_code=400, detail="Image is required")
     
     try:
-        print(f"📸 [ANALYZE] Processing image request...")
+        print(f"📸 [ANALYZE] Processing request (Mode: {request.mode})...")
+        
+        # Scenario A: NVIDIA Mode
+        if request.mode == "nvidia":
+            if not nvidia_service:
+                raise HTTPException(status_code=503, detail="NVIDIA service not initialized")
+            
+            result = nvidia_service.analyze_image(request.image, request.language)
+            if not result["success"]:
+                 raise HTTPException(status_code=500, detail=result["error"])
+            
+            return AnalyzeResponse(
+                success=True,
+                analysis=result["analysis"],
+                processed_image=request.image, # Return original for now as NVIDIA doesn't draw boxes
+                timestamp=datetime.now().isoformat(),
+                mode="nvidia"
+            )
+
+        # Scenario B: YOLO Mode (Default)
+        if detector is None:
+            raise HTTPException(status_code=503, detail="YOLO Model not loaded")
+
         # 1. Decode & Preprocess
         try:
             original_image = decode_base64_image(request.image)
@@ -105,7 +133,31 @@ async def analyze_image(request: AnalyzeRequest):
         print("🤖 [ANALYZE] Running YOLO inference...")
         result = detector.detect(model_input)
         
-        # 3. Generate Visualizations (Softly fail if this parts crashes)
+        # 3. Enhance with NVIDIA AI (if available) for much better naming
+        if nvidia_service and nvidia_service.client:
+            try:
+                print("🧠 [ANALYZE] Enhancing with NVIDIA Specialist Insight...")
+                # Request a quick analysis from NVIDIA to get the real names
+                nv_result = nvidia_service.analyze_image(request.image, request.language)
+                if nv_result["success"]:
+                    nv_analysis = nv_result["analysis"]
+                    # Merge NVIDIA's accurate names and descriptions into the result
+                    result["disease_name"] = nv_analysis.get("disease_name", result["disease_name"])
+                    result["disease_name_hindi"] = nv_analysis.get(f"disease_name_{request.language}", nv_analysis.get("disease_name_localized", result["disease_name_hindi"]))
+                    result["crop_identified"] = nv_analysis.get("crop_identified", result["crop_identified"])
+                    result["description"] = nv_analysis.get("description", result["description"])
+                    result["description_hindi"] = nv_analysis.get(f"description_{request.language}", nv_analysis.get("description_localized", result["description_hindi"]))
+                    result["symptoms"] = nv_analysis.get("symptoms", result["symptoms"])
+                    result["treatment_steps"] = nv_analysis.get("treatment_steps", result["treatment_steps"])
+                    result["organic_options"] = nv_analysis.get("organic_options", result["organic_options"])
+                    result["prevention_tips"] = nv_analysis.get("prevention_tips", result["prevention_tips"])
+                    # Use NVIDIA's confidence if it's high
+                    if nv_analysis.get("confidence"):
+                        result["confidence"] = nv_analysis["confidence"]
+            except Exception as nve:
+                print(f"⚠️ [ANALYZE] NVIDIA enhancement failed: {nve}")
+
+        # 4. Generate Visualizations (Softly fail if this parts crashes)
         processed_image_b64 = None
         try:
             print("🎨 [ANALYZE] Drawing disease regions...")
@@ -132,7 +184,9 @@ async def analyze_image(request: AnalyzeRequest):
             analysis=result,
             processed_image=processed_image_b64,
             timestamp=datetime.now().isoformat(),
+            mode="yolo"
         )
+
     except HTTPException:
         raise
     except Exception as e:
@@ -148,7 +202,9 @@ async def generate_speech(request: TTSRequest):
         raise HTTPException(status_code=503, detail="TTS service not initialized")
     
     try:
-        audio_bytes = await tts_service.generate_audio(request.text, request.language, request.gender)
+        # Normalize language code (handle en-US, hi-IN etc.)
+        lang_code = request.language.split("-")[0].lower() if request.language else "en"
+        audio_bytes = await tts_service.generate_audio(request.text, lang_code, request.gender)
         if not audio_bytes:
              raise HTTPException(status_code=500, detail="TTS generation failed")
              
@@ -162,6 +218,84 @@ async def generate_speech(request: TTSRequest):
     except Exception as e:
         print(f"❌ [TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat_offline")
+async def chat_offline(request: dict):
+    """
+    Offline AI Assistant that uses the local knowledge base with a conversational voice.
+    """
+    text = request.get("text", "").lower()
+    lang = request.get("language", "en")
+    
+    # Load knowledge base locally in Python for speed
+    import json
+    import random
+    kb_path = os.path.join(os.path.dirname(__file__), "../backend/data/agricultural_knowledge.json")
+    try:
+        with open(kb_path, 'r', encoding='utf-8') as f:
+            kb = json.load(f)
+    except:
+        return {"success": False, "error": "Knowledge base not found: " + kb_path}
+
+    def make_conversational(content, topic_name):
+        intros = {
+            "en": [
+                f"Regarding {topic_name}, here is some advice. ",
+                f"For {topic_name}, I've learned that ",
+                f"Ah, {topic_name}! Here is a quick rundown."
+            ],
+            "hi": [
+                f"{topic_name} के लिए, यहाँ मेरी सलाह है। ",
+                f"हाँ, {topic_name} को लेकर अक्सर पूछा जाता है। देखिए... ",
+                f"तो आप {topic_name} के बारे में जानना चाहते हैं? मैं बताता हूँ..."
+            ]
+        }
+        prefix = random.choice(intros.get(lang, intros["en"]))
+        return f"{prefix} {content}"
+
+    # Simple Keyword-based Intelligence
+    response_parts = []
+    
+    # Check crops
+    detected_crop = None
+    for crop_key, crop_data in kb.get("crops", {}).items():
+        if any(name in text for name in crop_data.get("names", [])) or crop_key in text:
+            detected_crop = (crop_key, crop_data)
+            break
+    
+    if detected_crop:
+        key, data = detected_crop
+        topic = "care"
+        for t_key, keywords in kb.get("topics", {}).items():
+            if any(kw in text for kw in keywords):
+                topic = t_key
+                break
+        
+        advice = data.get(topic, {}).get(lang) or data.get("care", {}).get(lang) or data.get(topic, {}).get("en")
+        if advice:
+            return {"success": True, "text": make_conversational(advice, key.capitalize()), "source": "local_wisdom"}
+
+    # Check Diseases
+    for d_key, d_data in kb.get("disease_reference", {}).items():
+        if d_key.replace("_", " ") in text:
+            symp = d_data.get("symptoms", {}).get(lang) or d_data.get("symptoms", {}).get("en")
+            treat = d_data.get("treatment", {}).get(lang) or d_data.get("treatment", {}).get("en")
+            content = f"{symp}\n\n**Here's the plan:** {treat}"
+            return {"success": True, "text": make_conversational(content, d_key.replace('_', ' ').capitalize()), "source": "local_wisdom"}
+
+    # Check Pests
+    for p_key, p_data in kb.get("pest_reference", {}).items():
+        if p_key.replace("_", " ") in text:
+            symp = p_data.get("symptoms", {}).get(lang) or p_data.get("symptoms", {}).get("en")
+            ctrl = p_data.get("control", {}).get(lang) or p_data.get("control", {}).get("en")
+            content = f"{symp}\n\n**What you should do:** {ctrl}"
+            return {"success": True, "text": make_conversational(content, p_key.replace('_', ' ').capitalize()), "source": "local_wisdom"}
+
+    return {
+        "success": False,
+        "error": "No specific match found in local wisdom.",
+        "text": "I couldn't find a direct match for that in my files."
+    }
 
 if __name__ == "__main__":
     import uvicorn

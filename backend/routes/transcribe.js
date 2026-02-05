@@ -87,9 +87,9 @@ router.post('/', uploadFields, async (req, res) => {
         let audioBase64 = null;
         const useTts = req.body.useTts === 'true';
 
-        if (useTts && process.env.OPENAI_API_KEY) {
-            console.log('🔊 Generating natural TTS audio...');
-            const audioBuffer = await generateSpeech(advisory.recommendation);
+        if (useTts) {
+            console.log('🔊 Generating natural TTS audio via local backend...');
+            const audioBuffer = await generateSpeech(advisory.recommendation, language);
             if (audioBuffer) {
                 audioBase64 = audioBuffer.toString('base64');
             }
@@ -102,6 +102,7 @@ router.post('/', uploadFields, async (req, res) => {
             const { saveChatItem } = require('../services/storageService');
             saveChatItem({
                 id: requestId,
+                conversationId: req.body.conversationId, // Grouping ID
                 query: transcript,
                 response: advisory.recommendation,
                 timestamp: new Date().toISOString(),

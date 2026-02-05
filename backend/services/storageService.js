@@ -109,15 +109,62 @@ function getChatHistory() {
 }
 
 /**
- * Save a chat item
+ * Save a chat item (Grouped by conversationId)
  */
 function saveChatItem(item) {
     try {
         const history = getChatHistory();
-        // Add new item to beginning
-        history.unshift(item);
 
-        // Limit history size (e.g., last 50 items)
+        if (item.conversationId) {
+            // Find existing conversation
+            const existingIndex = history.findIndex(h => h.conversationId === item.conversationId);
+
+            if (existingIndex !== -1) {
+                // Update existing conversation
+                const entry = history[existingIndex];
+
+                // Ensure messages array exists
+                if (!entry.messages) {
+                    entry.messages = [
+                        { query: entry.query, response: entry.response, timestamp: entry.timestamp, id: entry.id }
+                    ];
+                }
+
+                // Add new turn to history
+                entry.messages.push({
+                    query: item.query,
+                    response: item.response,
+                    timestamp: item.timestamp,
+                    id: item.id
+                });
+
+                // Update top-level metadata for preview list
+                entry.query = item.query;
+                entry.response = item.response;
+                entry.timestamp = item.timestamp;
+                entry.lastUpdated = new Date().toISOString();
+
+                // Move this conversation to the top
+                history.splice(existingIndex, 1);
+                history.unshift(entry);
+
+                fs.writeFileSync(CHAT_FILE, JSON.stringify(history, null, 2));
+                return true;
+            }
+        }
+
+        // New Conversation or No ID provided (Legacy/Analyze fallback)
+        const newItem = {
+            ...item,
+            messages: [
+                { query: item.query, response: item.response, timestamp: item.timestamp, id: item.id }
+            ],
+            lastUpdated: item.timestamp
+        };
+
+        history.unshift(newItem);
+
+        // Limit number of threads/conversations
         if (history.length > 50) {
             history.length = 50;
         }

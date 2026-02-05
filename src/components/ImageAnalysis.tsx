@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2 } from "lucide-react";
+import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
@@ -17,8 +17,10 @@ interface ImageAnalysisProps {
 
 export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps) {
   const [state, setState] = useState<AnalysisState>("camera");
+  const [analysisMode, setAnalysisMode] = useState<"yolo" | "nvidia">("yolo");
   const [analysisStep, setAnalysisStep] = useState<"crop" | "disease">("crop");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<DiseaseAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isSaved, setIsSaved] = useState(false);
@@ -28,17 +30,38 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const isHindi = language === "hi";
 
   const t = getTranslation('image', language);
   const tCommon = getTranslation('common', language);
-  const isHindi = language === "hi";
+  const isLocalized = language !== "en";
+
+  // Helper to get localized content from the AI result
+  const getContent = (enField: keyof DiseaseAnalysis, localizedField?: string) => {
+    if (!analysisResult) return "";
+    if (language === "en") return analysisResult[enField];
+
+    // Check for language-specific key (e.g., description_ta, description_hi)
+    const specificKey = `${String(enField)}_${language}` as keyof DiseaseAnalysis;
+    if (analysisResult[specificKey]) return analysisResult[specificKey];
+
+    // Check for generic localized key
+    const genericKey = `${String(enField)}_localized` as keyof DiseaseAnalysis;
+    if (analysisResult[genericKey]) return analysisResult[genericKey];
+
+    // Fallback to English
+    return analysisResult[enField];
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setPreviewImage(e.target?.result as string);
+        const result = e.target?.result as string;
+        setPreviewImage(result);
+        setOriginalImage(result);
         performAnalysis(file);
       };
       reader.readAsDataURL(file);
@@ -112,7 +135,8 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
       setState("analyzing");
 
       const stepTimer = setTimeout(() => setAnalysisStep("disease"), 1200);
-      const visionResult = await analyzeImage(file);
+      // Pass language to analyzeImage
+      const visionResult = await analyzeImage(file, analysisMode, language);
       clearTimeout(stepTimer);
 
       if (!visionResult.success || !visionResult.analysis) {
@@ -127,31 +151,10 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
       }
       setState("result");
 
-      // Auto-save to library
-      const newItem = {
-        diseaseName: visionResult.analysis.disease_name,
-        diseaseNameHi: visionResult.analysis.disease_name_hindi,
-        cropType: visionResult.analysis.crop_identified || "Unknown",
-        cropTypeHi: visionResult.analysis.crop_identified || "अज्ञात",
-        confidence: visionResult.analysis.confidence,
-        severity: visionResult.analysis.severity,
-        thumbnail: visionResult.processed_image || previewImage || "",
-        summary: visionResult.analysis.description,
-        summaryHi: visionResult.analysis.description_hindi,
-        description: visionResult.analysis.description,
-        descriptionHi: visionResult.analysis.description_hindi,
-        symptoms: visionResult.analysis.symptoms,
-        symptomsHi: visionResult.analysis.symptoms_hindi,
-        treatment: visionResult.analysis.treatment_steps,
-        treatmentHi: visionResult.analysis.treatment_steps_hindi,
-      };
-      const { item: savedItem, isDuplicate } = await addItem(newItem);
-      setIsSaved(true);
-      if (isDuplicate) {
-        toast.info(isHindi ? "इतिहास में पहले से मौजूद, समय अपडेट किया गया" : "Already in history, time updated");
-      } else if (savedItem) {
-        toast.success(isHindi ? "इतिहास में सहेजा गया" : "Saved to history");
-      }
+      // Auto-save logic is handled by the user explicitly or we can double check settings
+      // For now, we'll let the user save manually or call saveToLibrary() here if we want auto-save default
+      // But to avoid duplication with the manual button, let's just leave it manual or call the shared function
+      saveToLibrary(visionResult.analysis, visionResult.processed_image);
 
     } catch (error) {
       setErrorMessage("Connection issue. Ensure backend is running.");
@@ -159,10 +162,44 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
     }
   };
 
+  const saveToLibrary = async (result = analysisResult, image = previewImage) => {
+    if (!result || !image) return;
+
+    const newItem = {
+      diseaseName: result.disease_name,
+      diseaseNameHi: result.disease_name_hindi,
+      cropType: result.crop_identified || "Unknown",
+      cropTypeHi: result.crop_identified || "अज्ञात",
+      confidence: result.confidence,
+      severity: result.severity,
+      thumbnail: image,
+      summary: result.description,
+      summaryHi: result.description_hindi,
+      description: result.description,
+      descriptionHi: result.description_hindi,
+      symptoms: result.symptoms,
+      symptomsHi: result.symptoms_hindi,
+      treatment: result.treatment_steps,
+      treatmentHi: result.treatment_steps_hindi,
+    };
+
+    const { item: savedItem, isDuplicate } = await addItem(newItem);
+    setIsSaved(true);
+
+    // Only show toast if triggered manually (i.e. analysisResult is already set) 
+    // or if we want to confirm auto-save. Let's just confirm save.
+    if (isDuplicate) {
+      // toast.info(language === 'hi' ? "पहले से मौजूद" : "Already saved");
+    } else if (savedItem) {
+      toast.success(language === 'hi' ? "सहेजा गया" : "Saved to Library");
+    }
+  };
+
   const resetAnalysis = () => {
     stopCamera();
     setState("camera");
     setPreviewImage(null);
+    setOriginalImage(null);
     setAnalysisResult(null);
     setErrorMessage("");
     setIsSaved(false);
@@ -171,15 +208,31 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
   const speakAdvice = () => {
     if (isMuted) {
-      toast.info(isHindi ? "आवाज बंद है। सुनने के लिए अनम्यूट करें।" : "Audio is muted. Unmute to hear advice.");
+      toast.info(language === 'hi' ? "आवाज बंद है। सुनने के लिए अनम्यूट करें।" : "Audio is muted. Unmute to hear advice.");
       return;
     }
     if (analysisResult && "speechSynthesis" in window) {
-      const name = isHindi ? analysisResult.disease_name_hindi : analysisResult.disease_name;
-      const desc = isHindi ? analysisResult.description_hindi : analysisResult.description;
+      // Use localized content for speech
+      const name = getContent('disease_name') as string;
+      const desc = getContent('description') as string;
       const text = `${name}. ${desc}`;
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = language === "hi" ? "hi-IN" : language === "ta" ? "ta-IN" : language === "te" ? "te-IN" : language === "mr" ? "mr-IN" : "en-US";
+
+      // Map app language codes to TTS codes
+      const langMap: Record<string, string> = {
+        'hi': 'hi-IN',
+        'ta': 'ta-IN',
+        'te': 'te-IN',
+        'mr': 'mr-IN',
+        'kn': 'kn-IN',
+        'bn': 'bn-IN',
+        'ml': 'ml-IN',
+        'pa': 'pa-IN',
+        'gu': 'gu-IN',
+        'en': 'en-US'
+      };
+
+      utterance.lang = langMap[language] || 'en-US';
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -190,44 +243,94 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
     onClose();
   };
 
+  // Helper for static labels
+  const getSectionTitle = (section: string) => {
+    if (language === 'en') return section;
+
+    const titles: Record<string, Record<string, string>> = {
+      "How it was formed": {
+        "hi": "यह कैसे बना",
+        "ta": "இது எப்படி உருவானது",
+        "te": "ఇది ఎలా ఏర్పడింది",
+        "mr": "ते कसे तयार झाले"
+      },
+      "Treatment Plan": {
+        "hi": "उपचार योजना",
+        "ta": "சிகிச்சை திட்டம்",
+        "te": "చికిత్స ప్రణాళిక",
+        "mr": "उपचार योजना"
+      },
+      "Prevention Tips": {
+        "hi": "रोकथाम युक्तियाँ",
+        "ta": "தடுப்பு குறிப்புகள்",
+        "te": "నివారణ చిట్కాలు",
+        "mr": "प्रतिबंधात्मक उपाय"
+      }
+    };
+
+    return titles[section]?.[language] || section;
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
-      {/* Header - Always visible */}
-      <header className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-apple">
-        <button
-          onClick={handleClose}
-          className="w-10 h-10 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors active:scale-95"
-        >
-          <X size={20} />
-        </button>
+    <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Header */}
+      <div className="p-4 flex items-center justify-between border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
+        <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full">
+          <X className="w-6 h-6" />
+        </Button>
         <div className="text-center">
-          <h1 className="text-headline font-bold text-foreground">{t.title}</h1>
-          <p className="text-caption text-muted-foreground">{t.subtitle}</p>
+          <h2 className="text-headline font-bold text-foreground">{t.title}</h2>
+          <p className="text-caption text-muted-foreground">AI-Powered Analysis</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => {
-            const newState = !isMuted;
-            setIsMuted(newState);
-            localStorage.setItem("agrovoice_muted", String(newState));
-            if (newState) window.speechSynthesis?.cancel();
+            const newMuted = !isMuted;
+            setIsMuted(newMuted);
+            localStorage.setItem("agrovoice_muted", String(newMuted));
+            if (!newMuted) speakAdvice();
+            else window.speechSynthesis.cancel();
           }}
-          className={cn(
-            "w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95",
-            isMuted ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border hover:bg-muted text-primary"
-          )}
-          title={isMuted ? "Unmute AI" : "Mute AI"}
+          className="rounded-full"
         >
-          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-        </button>
-      </header>
+          {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+        </Button>
+      </div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Camera State */}
+      <div className="flex-1 overflow-y-auto pb-20">
         {state === "camera" && (
           <div className="flex flex-col items-center justify-center p-6 min-h-[60vh] animate-fade-in">
+            {/* Mode Toggle - Compact Icons */}
+            <div className="bg-muted/50 p-1 rounded-full flex gap-1 shadow-sm border border-border/50 mb-6">
+              <button
+                onClick={() => setAnalysisMode("yolo")}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                  analysisMode === "yolo"
+                    ? "bg-white text-primary shadow-sm scale-105"
+                    : "text-muted-foreground hover:bg-white/50"
+                )}
+                title="General"
+              >
+                <Camera size={18} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => setAnalysisMode("nvidia")}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                  analysisMode === "nvidia"
+                    ? "bg-white text-primary shadow-sm scale-105"
+                    : "text-muted-foreground hover:bg-white/50"
+                )}
+                title="Farmer Assist"
+              >
+                <Search size={18} strokeWidth={2.5} />
+              </button>
+            </div>
+
             {/* Upload/Camera Area */}
             <div
               className={cn(
@@ -299,108 +402,136 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
               )}
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
             </div>
+
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              ref={cameraInputRef}
+              onChange={handleFileSelect}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+            />
           </div>
         )}
 
-        {/* Loading State */}
         {(state === "uploading" || state === "analyzing") && (
-          <div className="flex flex-col items-center justify-center p-8 min-h-[60vh] animate-fade-in">
-            <div className="relative w-64 h-64 rounded-apple-lg overflow-hidden shadow-apple-lg">
+          <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in zoom-in-95 duration-500">
+            {/* Scanning Animation Container - Reduced size */}
+            <div className="relative w-[200px] aspect-square rounded-apple-lg overflow-hidden border-2 border-primary/20 shadow-green bg-black/5">
+              {/* Preview Image */}
               {previewImage && (
-                <img src={previewImage} alt="Scanning" className="w-full h-full object-cover" />
+                <img
+                  src={previewImage}
+                  alt="Scanning..."
+                  className="w-full h-full object-cover opacity-90 scale-105"
+                />
               )}
-              <div className="absolute inset-0 border-2 border-primary/50 rounded-apple-lg" />
-              <div className="absolute top-0 left-0 w-full h-1 bg-primary shadow-[0_0_15px_hsl(var(--primary))] animate-scan-line" />
+
+              {/* Scan Line Overlay - Fixed height and animation */}
+              <div className="absolute top-0 left-0 w-full h-1 bg-primary shadow-[0_0_20px_rgba(118,185,0,0.8)] animate-scan-line z-20" />
+
+              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+
+              {/* Grid Overlay for "High Tech" feel */}
+              <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10 pointer-events-none" />
             </div>
 
-            <div className="mt-8 text-center space-y-3">
-              <div className="inline-flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-primary animate-spin-smooth" />
-                <p className="text-title font-bold text-foreground">
-                  {state === "uploading" ? t.uploading : (analysisStep === "crop" ? t.detectingCrop : t.identifyingDisease)}
-                </p>
-              </div>
-              <p className="text-subhead text-muted-foreground">{t.analyzingNote}</p>
-
-              {/* Progress Bar */}
-              <div className="w-64 h-1.5 bg-muted rounded-full overflow-hidden mt-4">
-                <div
-                  className={cn(
-                    "h-full bg-primary rounded-full transition-all duration-700",
-                    state === "uploading" ? "w-1/3" : (analysisStep === "crop" ? "w-2/3" : "w-[95%]")
-                  )}
-                />
-              </div>
+            <div className="text-center space-y-3">
+              <h3 className="text-title font-bold text-foreground">
+                {state === "uploading" ? "Preparing Scan" : "Scanning Plant..."}
+              </h3>
+              <p className="text-subhead text-muted-foreground animate-pulse">
+                {state === "uploading" ? "Optimizing image for AI..." : "Identifying potential issues..."}
+              </p>
             </div>
           </div>
         )}
 
-        {/* Result State */}
-        {state === "result" && (
-          <div className="p-5 pb-24 animate-slide-up">
-            {/* Image Preview */}
+        {state === "result" && analysisResult && (
+          <div className="animate-in fade-in sli-up duration-700">
             {previewImage && (
-              <div className="relative rounded-apple-lg overflow-hidden shadow-apple-lg bg-muted mb-6">
-                <img src={previewImage} alt="Result" className="w-full h-auto object-contain max-h-72" />
-                {analysisResult?.crop_identified && (
-                  <div className="absolute top-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full text-caption font-bold uppercase tracking-wide text-primary shadow-sm border border-border">
-                    {analysisResult.crop_identified}
+              <div className="w-full bg-black/5 border-b border-border/50 p-6 flex flex-col items-center">
+                <div className="relative group w-full max-w-[280px] aspect-square rounded-apple-xl overflow-hidden border-2 border-primary shadow-green mb-4">
+                  <img
+                    src={previewImage}
+                    alt="Analysis Result"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 right-3 bg-primary/90 backdrop-blur-md px-3 py-1 rounded-full border border-primary/20 flex items-center gap-1.5 shadow-apple-sm text-primary-foreground">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                      {analysisResult.crop_identified || "UNKNOWN"}
+                    </span>
                   </div>
-                )}
+                </div>
+
+                <div className="bg-background/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-border flex items-center gap-2 shadow-apple-sm">
+                  <div className="text-[11px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Sparkles size={12} className="text-primary" />
+                    AI Analyzed Image
+                  </div>
+                </div>
               </div>
             )}
 
-            {errorMessage ? (
-              <div className="p-8 bg-destructive/5 rounded-apple-lg border border-destructive/20 text-center">
-                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-                <h3 className="text-headline font-bold text-destructive mb-2">{t.errorTitle}</h3>
-                <p className="text-subhead text-muted-foreground mb-4">{errorMessage}</p>
-                <Button variant="outline" onClick={resetAnalysis} className="text-destructive border-destructive/30">
-                  <RotateCcw className="mr-2 h-4 w-4" /> {tCommon.tryAgain}
-                </Button>
-              </div>
-            ) : analysisResult && (
-              <div className="space-y-6">
+            {analysisResult && (
+              <div className="p-5 space-y-6 relative z-10">
                 {/* Status Banner */}
                 <div className={cn(
-                  "p-4 rounded-apple-lg flex items-center gap-3",
-                  analysisResult.severity === 'high'
-                    ? "bg-destructive/10 border border-destructive/20"
-                    : "bg-green-wash border border-primary/20"
+                  "p-4 rounded-apple-lg flex items-center gap-3 shadow-apple",
+                  analysisResult.disease_name.toLowerCase() === 'healthy'
+                    ? "bg-green-wash border border-primary/20"
+                    : "bg-destructive/10 border border-destructive/20"
                 )}>
-                  {analysisResult.severity === 'high' ? (
-                    <AlertCircle className="w-6 h-6 text-destructive flex-shrink-0" />
-                  ) : (
+                  {analysisResult.disease_name.toLowerCase() === 'healthy' ? (
                     <CheckCircle className="w-6 h-6 text-primary flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-6 h-6 text-destructive flex-shrink-0" />
                   )}
-                  <div>
+                  <div className="flex-1">
                     <p className={cn(
-                      "text-headline font-bold",
-                      analysisResult.severity === 'high' ? "text-destructive" : "text-primary"
+                      "text-headline font-black tracking-tight",
+                      analysisResult.disease_name.toLowerCase() === 'healthy' ? "text-primary" : "text-destructive"
                     )}>
-                      {analysisResult.severity === 'high' ? t.diseaseDetected : t.healthy}
+                      {analysisResult.disease_name.toLowerCase() === 'healthy' ? t.healthy : t.diseaseDetected}
                     </p>
-                    <p className="text-subhead text-muted-foreground">
-                      {isHindi ? analysisResult.disease_name_hindi : analysisResult.disease_name}
+                    <p className="text-subhead font-bold text-muted-foreground">
+                      {getContent('disease_name') as string}
                     </p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={isSaved}
+                    onClick={() => saveToLibrary()}
+                    className={cn("rounded-full h-10 w-10 shrink-0", isSaved && "text-primary")}
+                  >
+                    <BookmarkPlus className={cn("w-5 h-5", isSaved && "fill-current")} />
+                  </Button>
                 </div>
 
                 {/* Confidence & Severity */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-muted rounded-apple border border-border text-center">
-                    <p className="text-caption font-bold text-muted-foreground uppercase tracking-wide mb-1">{t.confidence}</p>
-                    <p className="text-title font-bold text-foreground">{analysisResult.confidence}%</p>
+                  <div className="p-4 bg-muted/40 rounded-apple-lg border border-border text-center">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">{t.confidence}</p>
+                    <p className="text-title font-black text-foreground">{analysisResult.confidence}%</p>
                   </div>
                   <div className={cn(
-                    "p-4 rounded-apple border text-center",
+                    "p-4 rounded-apple-lg border text-center shadow-sm",
                     analysisResult.severity === 'high'
                       ? "bg-destructive/5 border-destructive/20"
                       : "bg-green-wash border-primary/20"
                   )}>
-                    <p className="text-caption font-bold text-muted-foreground uppercase tracking-wide mb-1">{t.severity}</p>
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">{t.severity}</p>
                     <p className={cn(
-                      "text-title font-bold",
+                      "text-title font-black",
                       analysisResult.severity === 'high' ? "text-destructive" : "text-primary"
                     )}>
                       {analysisResult.severity === 'high' ? t.high : (analysisResult.severity === 'medium' ? t.medium : t.low)}
@@ -408,49 +539,52 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
                   </div>
                 </div>
 
-                {/* Description */}
-                <div className="p-4 bg-green-wash rounded-apple border-l-4 border-primary">
-                  <p className="text-body text-foreground leading-relaxed">
-                    {isHindi ? analysisResult.description_hindi : analysisResult.description}
+                {/* 3. How it was formed (Description) */}
+                <div className="space-y-3 pb-2">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-1">
+                    {getSectionTitle("How it was formed")}
                   </p>
+                  <div className="p-5 bg-muted/30 rounded-apple-lg border border-border">
+                    <p className="text-subhead text-muted-foreground leading-relaxed">
+                      {getContent('description') as string}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Listen Button */}
-                <Button
-                  className="w-full h-14 text-body font-semibold rounded-apple bg-primary hover:bg-primary/90 shadow-green active:scale-[0.98] transition-all"
-                  onClick={speakAdvice}
-                >
-                  <Volume2 className="mr-2 h-5 w-5" /> {t.hearAdvice}
-                </Button>
-
-                {/* Symptoms */}
+                {/* Symptoms (Separate Cards) */}
                 {analysisResult.symptoms && analysisResult.symptoms.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.symptoms}</h3>
-                    <div className="space-y-2">
-                      {(isHindi ? analysisResult.symptoms_hindi : analysisResult.symptoms).map((s, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-muted rounded-apple border border-border">
-                          <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-caption font-bold text-primary flex-shrink-0">
+                  <div className="space-y-3 pb-2">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-1">
+                      {t.symptoms}
+                    </p>
+                    <div className="space-y-2.5">
+                      {(getContent('symptoms') as string[]).map((s, i) => (
+                        <div key={i} className="flex items-center gap-4 p-4 bg-background rounded-apple border border-border shadow-sm">
+                          <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-caption font-black text-primary flex-shrink-0">
                             {i + 1}
                           </span>
-                          <p className="text-subhead text-foreground">{s}</p>
+                          <p className="text-subhead font-medium text-foreground/80">{s}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Treatment */}
+                {/* 5. How we can recover (Treatment Steps) */}
                 {analysisResult.treatment_steps && analysisResult.treatment_steps.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.treatment}</h3>
-                    <div className="bg-foreground text-background p-5 rounded-apple-lg space-y-4">
-                      {(isHindi ? analysisResult.treatment_steps_hindi : analysisResult.treatment_steps).map((step, i) => (
+                  <div className="space-y-3 pb-2">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-1">
+                      {getSectionTitle("Treatment Plan")}
+                    </p>
+                    <div className="bg-slate-900 p-6 rounded-apple-xl space-y-5 shadow-xl">
+                      {(getContent('treatment_steps') as string[]).map((step, i) => (
                         <div key={i} className="flex gap-4">
-                          <span className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold flex-shrink-0">
+                          <span className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-caption font-black text-primary-foreground flex-shrink-0 mt-0.5">
                             {i + 1}
                           </span>
-                          <p className="text-subhead leading-relaxed pt-1">{step}</p>
+                          <p className="text-subhead text-slate-200 leading-relaxed font-medium">
+                            {step}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -459,28 +593,32 @@ export function ImageAnalysis({ isOpen, onClose, language }: ImageAnalysisProps)
 
                 {/* Organic Options */}
                 {analysisResult.organic_options && analysisResult.organic_options.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.organic}</h3>
-                    <div className="p-4 bg-green-wash rounded-apple-lg border border-primary/20 space-y-3">
-                      {(isHindi ? analysisResult.organic_options_hindi : analysisResult.organic_options).map((opt, i) => (
+                  <div className="space-y-3 pb-2">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-1">
+                      {t.organic}
+                    </p>
+                    <div className="p-4 bg-green-wash rounded-apple-lg border border-primary/20 space-y-3 shadow-sm">
+                      {(getContent('organic_options') as string[]).map((opt, i) => (
                         <div key={i} className="flex items-start gap-3">
                           <CheckCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                          <p className="text-subhead text-foreground">{opt}</p>
+                          <p className="text-subhead text-foreground font-medium">{opt}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Prevention Tips */}
+                {/* 4. How we can prevent (Prevention Tips) */}
                 {analysisResult.prevention_tips && analysisResult.prevention_tips.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground">{t.prevention}</h3>
-                    <div className="p-4 bg-muted rounded-apple-lg border border-border space-y-3">
-                      {(isHindi ? analysisResult.prevention_tips_hindi : analysisResult.prevention_tips).map((tip, i) => (
+                  <div className="space-y-3 pb-2">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-1">
+                      {getSectionTitle("Prevention Tips")}
+                    </p>
+                    <div className="p-4 bg-muted/30 rounded-apple-lg border border-border space-y-3">
+                      {(getContent('prevention_tips') as string[]).map((tip, i) => (
                         <div key={i} className="flex items-start gap-3">
                           <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
-                          <p className="text-subhead text-foreground">{tip}</p>
+                          <p className="text-subhead text-muted-foreground leading-relaxed">{tip}</p>
                         </div>
                       ))}
                     </div>

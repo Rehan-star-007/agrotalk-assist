@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cloud, Sun, CloudRain, Wind, Droplets, CloudSnow, CloudLightning, CloudFog, CloudDrizzle, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import { Cloud, Sun, Moon, CloudRain, Wind, Droplets, CloudSnow, CloudLightning, CloudFog, CloudDrizzle, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTranslation, dayNames, monthNames, type SupportedLanguage } from '@/lib/translations';
 
@@ -26,7 +26,7 @@ interface WeatherDashboardProps {
 }
 
 // Weather icon components
-const WeatherIcon: React.FC<{ code: number; size?: 'sm' | 'md' | 'lg' }> = ({ code, size = 'md' }) => {
+const WeatherIcon: React.FC<{ code: number; size?: 'sm' | 'md' | 'lg'; isNight?: boolean }> = ({ code, size = 'md', isNight = false }) => {
   const sizeClasses = {
     sm: 'w-6 h-6',
     md: 'w-10 h-10',
@@ -36,8 +36,8 @@ const WeatherIcon: React.FC<{ code: number; size?: 'sm' | 'md' | 'lg' }> = ({ co
   const iconClass = cn(sizeClasses[size], 'opacity-90');
 
   // Map weather codes to icons with appropriate colors
-  if (code === 0) return <Sun className={cn(iconClass, 'text-amber-200')} />;
-  if (code === 1) return <Sun className={cn(iconClass, 'text-amber-100')} />;
+  if (code === 0) return isNight ? <Moon className={cn(iconClass, 'text-slate-200')} /> : <Sun className={cn(iconClass, 'text-amber-200')} />;
+  if (code === 1) return isNight ? <Moon className={cn(iconClass, 'text-slate-200')} /> : <Sun className={cn(iconClass, 'text-amber-100')} />;
   if (code === 2) return <Cloud className={cn(iconClass, 'text-white')} />;
   if (code === 3) return <Cloud className={cn(iconClass, 'text-slate-200')} />;
   if (code >= 45 && code <= 48) return <CloudFog className={cn(iconClass, 'text-slate-300')} />;
@@ -97,7 +97,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
   if (loading) {
     return (
       <div className="mb-6">
-        <div className="bg-gradient-to-br from-primary to-primary/80 rounded-apple-lg p-5 text-primary-foreground shadow-green animate-pulse">
+        <div className="bg-primary rounded-apple-lg p-5 text-primary-foreground shadow-green animate-pulse">
           <div className="flex items-center justify-between">
             <div className="space-y-2">
               <div className="h-4 bg-white/20 rounded w-24" />
@@ -114,7 +114,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
   if (error || !data) {
     return (
       <div className="mb-6">
-        <div className="bg-gradient-to-br from-muted to-muted/80 rounded-apple-lg p-5 text-muted-foreground border border-border">
+        <div className="bg-muted rounded-apple-lg p-5 text-muted-foreground border border-border">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-subhead opacity-80">{t.title}</p>
@@ -130,6 +130,8 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
 
   const currentLabel = getWeatherLabel(data.current.weather_code, t);
   const today = new Date();
+  const currentHour = today.getHours();
+  const isNight = currentHour >= 18 || currentHour < 6;
   const formattedToday = formatDate(today.toISOString(), language);
 
   return (
@@ -138,7 +140,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
       <div
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "bg-gradient-to-br from-primary to-primary/80 rounded-apple-lg text-primary-foreground shadow-green overflow-hidden transition-all duration-300 cursor-pointer active:scale-[0.99]",
+          "bg-primary rounded-apple-lg text-primary-foreground shadow-green overflow-hidden transition-all duration-300 cursor-pointer active:scale-[0.99]",
           isExpanded ? "shadow-apple-lg" : ""
         )}
       >
@@ -154,7 +156,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
             </div>
 
             <div className="flex flex-col items-end gap-2">
-              <WeatherIcon code={data.current.weather_code} size="lg" />
+              <WeatherIcon code={data.current.weather_code} size="lg" isNight={isNight} />
               <div className="flex items-center gap-1 text-subhead opacity-80">
                 <Droplets size={16} />
                 <span>{data.current.relative_humidity_2m}%</span>

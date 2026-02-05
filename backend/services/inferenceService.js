@@ -17,33 +17,33 @@ try {
 const CONDITION_PATTERNS = [
     {
         keywords: ['yellow', 'yellowing', 'chlorosis', 'pale', 'faded', 'bleach'],
-        condition: 'Possible Nutrient Deficiency',
-        recommendation: 'The yellowing pattern suggests possible nitrogen or iron deficiency. Consider soil testing and apply appropriate fertilizer. Ensure proper watering schedule - neither too much nor too little. If yellowing spreads, consult a local agricultural extension office.'
+        condition: 'Nutrient Story',
+        recommendation: "Yellow leaves usually mean the plant is hungry for nitrogen or iron. Check your soil and try a balanced fertilizer. Also, don't overwater, as that can cause yellowing too!"
     },
     {
         keywords: ['dry', 'dried', 'wilt', 'wilted', 'wilting', 'drought', 'parched'],
-        condition: 'Water Stress Detected',
-        recommendation: 'Signs of water stress observed. Increase irrigation frequency, preferably early morning or evening. Consider mulching to retain soil moisture. Check for root damage that may prevent water uptake.'
+        condition: 'Watering Wisdom',
+        recommendation: "I see some wilting. Try deep, early morning watering so it reaches the roots before the heat. Adding some mulch around the base will help keep the moisture in."
     },
     {
         keywords: ['brown', 'browning', 'necrosis', 'dead', 'dying', 'scorched', 'burnt'],
-        condition: 'Leaf Damage / Environmental Stress',
-        recommendation: 'Brown patches may indicate sunburn, frost damage, or chemical burn. If localized, prune affected areas. Ensure proper spacing for air circulation. Avoid pesticide application during hot days.'
+        condition: 'Environmental Stress',
+        recommendation: "Those brown patches might be too much sun or a bit of chemical burn. Prune those dead parts and give the plant some shade during the hottest part of the day."
     },
     {
         keywords: ['spot', 'spots', 'spotted', 'lesion', 'lesions', 'blotch', 'patch'],
-        condition: 'Possible Fungal Infection',
-        recommendation: 'Spotted patterns suggest fungal or bacterial infection. Remove and destroy affected leaves. Apply appropriate fungicide (copper-based for organic farming). Improve air circulation and avoid overhead watering.'
+        condition: 'Disease Watch',
+        recommendation: "Spots on leaves often mean a fungus is visiting. Remove the spotted leaves so it doesn't spread, and try an organic copper-based spray."
     },
     {
         keywords: ['mold', 'mildew', 'fungus', 'fungi', 'powdery', 'fuzzy', 'cottony'],
-        condition: 'Mold/Mildew Infection',
-        recommendation: 'Fungal growth detected. Apply neem oil or appropriate fungicide. Reduce humidity around plants if possible. Ensure adequate plant spacing. Remove severely affected plant parts.'
+        condition: 'Fungal Alert',
+        recommendation: "That powdery coating is likely a fungus. Thin out the branches to get better air flow and use some neem oil to clear it up."
     },
     {
         keywords: ['insect', 'bug', 'pest', 'aphid', 'beetle', 'caterpillar', 'worm', 'larvae'],
-        condition: 'Pest Infestation',
-        recommendation: 'Pest presence detected. Inspect plants thoroughly for eggs and larvae. Consider introducing beneficial insects like ladybugs. Use neem oil spray as an organic control measure.'
+        condition: 'Pest Patrol',
+        recommendation: "Pests are trying to have a free meal! Check under the leaves and use a bit of neem oil. You can also try inviting ladybugs over for natural protection."
     }
 ];
 
@@ -54,9 +54,24 @@ const CONDITION_PATTERNS = [
 function fuzzyMatchCrop(text) {
     const normalized = (text || '').toLowerCase().replace(/[\s-_]/g, '');
 
+    // Slang mappings
+    const slang = {
+        'rmelon': 'watermelon',
+        'tato': 'potato',
+        'mater': 'tomato',
+        'bhindi': 'ladyfinger'
+    };
+
+    for (const [s, real] of Object.entries(slang)) {
+        if (normalized.includes(s)) return real;
+    }
+
     for (const [cropKey, cropData] of Object.entries(knowledgeBase.crops || {})) {
-        // Check exact names
-        if (cropData.names && cropData.names.some(name => normalized.includes(name.toLowerCase().replace(/[\s-_]/g, '')))) {
+        // Check exact names or if normalized contains a significant part of the name
+        if (cropData.names && cropData.names.some(name => {
+            const n = name.toLowerCase().replace(/[\s-_]/g, '');
+            return normalized.includes(n) || (n.length > 4 && normalized.includes(n.substring(0, n.length - 1)));
+        })) {
             return cropKey;
         }
         // Check crop key itself
@@ -65,6 +80,19 @@ function fuzzyMatchCrop(text) {
         }
     }
     return null;
+}
+
+/**
+ * Detect large scale farming vs home gardening
+ */
+function detectScale(text) {
+    const normalized = (text || '').toLowerCase();
+    const largeScaleKeywords = ['acre', 'acrea', 'hectare', 'big farm', 'commercial', 'field', '10 acre', '5 acre'];
+
+    if (largeScaleKeywords.some(kw => normalized.includes(kw))) {
+        return 'large';
+    }
+    return 'small';
 }
 
 /**
@@ -137,7 +165,7 @@ function inferAdvice(labels) {
 
 /**
  * Advanced Dynamic Inference from Text
- * Now supports conversation history for context-aware responses
+ * Enhanced for Extensive Local Wisdom (6000+ lines knowledge base)
  */
 async function inferAdviceFromText(text, language = 'en', weatherContext = null, conversationHistory = []) {
     const normalized = (text || '').trim();
@@ -153,144 +181,250 @@ async function inferAdviceFromText(text, language = 'en', weatherContext = null,
 
     const lang = ['hi', 'ta', 'te', 'mr'].includes(language) ? language : 'en';
 
-    // 1. AI Assistant (Priority if History exists)
-    // If we have conversation history, we MUST use AI to maintain context.
-    // We removed the word count check to allow "Local Wisdom" (KB/Weather keys) to trigger for fresh queries.
-    if (process.env.OPENROUTER_API_KEY && conversationHistory && conversationHistory.length > 0) {
-        console.log(`🧠 Conversation History detected (${conversationHistory.length} items). Prioritizing AI.`);
+    // 1. LANGUAGE RULE: Local Wisdom is English-only.
+    // For other languages, we MUST use an AI model (Remote or Local).
+    if (lang !== 'en') {
+        console.log(`📡 Non-English query (${lang}) detected. Routing to AI...`);
+
+        // A. Attempt Remote AI (OpenRouter)
+        if (process.env.OPENROUTER_API_KEY && process.env.OFFLINE_MODE !== 'true') {
+            try {
+                const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang, conversationHistory);
+                if (aiResponse) {
+                    return {
+                        condition: 'Farmer Assist',
+                        confidence: 'High',
+                        recommendation: aiResponse.text
+                    };
+                }
+            } catch (e) {
+                console.error('❌ Cloud AI Error for non-English:', e);
+            }
+        }
+
+        // B. Fallback to Local AI Assistant (Offline Python LLM)
         try {
-            // We pass null for 'labels' as we are text-based here
+            const response = await fetch('http://localhost:8000/api/chat_offline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: normalized,
+                    language: lang,
+                    context: { weather: weatherContext, history: conversationHistory }
+                })
+            });
+            const localAi = await response.json();
+            if (localAi && localAi.success) {
+                return {
+                    condition: 'General',
+                    confidence: 'High',
+                    recommendation: localAi.text
+                };
+            }
+        } catch (e) {
+            console.log('⚠️ Local AI for non-English unavailable.');
+        }
+
+        // C. Final Fallback if all AI fail for non-English
+        const languageFallbacks = {
+            'hi': "क्षमा करें, इस भाषा में सलाह देने के लिए मुझे एआई सेवा की आवश्यकता है जो अभी उपलब्ध नहीं है। कृपया अपना इंटरनेट जांचें।",
+            'ta': "மன்னிக்கவும், இந்த மொழியில் ஆலோசனை வழங்க எனக்கு AI சேவை தேவை, அது தற்போது கிடைக்கவில்லை. உங்கள் இணையத்தை சரிபார்க்கவும்.",
+            'te': "క్షమించండి, ఈ భాషలో సలహా ఇవ్వడానికి నాకు AI సేవ అవసరం, అది ప్రస్తుతం అందుబాటులో లేదు. మీ ఇంటర్నెట్‌ని తనిఖీ చేయండి.",
+            'mr': "क्षमस्व, या भाषेत सल्ला देण्यासाठी मला एआय सेवेची आवश्यकता आहे जी सध्या उपलब्ध नाही. कृपया तुमचे इंटरनेट तपासा."
+        };
+
+        return {
+            condition: 'AI Required',
+            confidence: 'Low',
+            recommendation: languageFallbacks[lang] || "I'm sorry, providing advice in this language requires an active AI connection which is currently unavailable."
+        };
+    }
+
+    // 2. ENGLISH-ONLY TIERED SEARCH (Local AI -> Cloud AI (if history) -> Local Wisdom)
+    if (process.env.OFFLINE_MODE === 'true' || !process.env.OPENROUTER_API_KEY) {
+        console.log('🤖 Attempting Local Offline Model (English)...');
+        try {
+            const response = await fetch('http://localhost:8000/api/chat_offline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: normalized,
+                    language: 'en',
+                    context: { weather: weatherContext, history: conversationHistory }
+                })
+            });
+            const localAi = await response.json();
+            if (localAi && localAi.success) {
+                return {
+                    condition: 'General',
+                    confidence: 'High',
+                    recommendation: localAi.text
+                };
+            }
+        } catch (e) {
+            console.log('⚠️ Local AI for English failed, falling back to Local Wisdom.');
+        }
+    }
+
+    // 2. AI Assistant (Online Priority)
+    if (process.env.OPENROUTER_API_KEY && conversationHistory && conversationHistory.length > 0) {
+        // ... (existing AI logic)
+        try {
             const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang, conversationHistory);
             if (aiResponse) {
                 return {
-                    condition: 'AI Assistant (Conversational)',
+                    condition: 'Farmer Assist',
                     confidence: 'High',
                     recommendation: aiResponse.text
                 };
             }
         } catch (e) {
             console.error('❌ AI Priority Error:', e);
-            // Fallthrough to local logic on error
         }
     }
 
-    // 2. Precise Match from Knowledge Base (Crops)
-    // We check this BEFORE weather fallback so "Dragon fruit water" gets crop info, not just generic weather info.
+    // 3. EXTENSIVE LOCAL WISDOM SEARCH (The "Farming Buddy" Layer)
     const { crop, topic } = extractCropAndTopic(normalized);
 
-    if (crop && knowledgeBase.crops[crop]) {
-        const cropData = knowledgeBase.crops[crop];
-        let adviceText = cropData[topic] ? cropData[topic][lang] : null;
+    // Internal Helper for Podcast Vibe
+    const makeConversational = (content, header, scale = 'small') => {
+        const intros = {
+            en: [
+                `You know, when it comes to ${header}, here's what I've learned. `,
+                `That's a great question about ${header}. Let me share some wisdom on that. `,
+                `So, you're curious about ${header}? Here's the deal... `,
+                `Ah, ${header}! One of my favorite topics. Here's a quick rundown for you. `,
+                `Look, I know you're chillin', but we gots to talk about ${header}. Here's the lowdown: `,
+                `Bro, I feel you on the lazy vibes, but for ${header}, here's the absolute minimum you gotta do: `,
+                `If you're just vibing and don't wanna do much, here's the quick fix for ${header}: `
+            ],
+            hi: [
+                `${header} के बारे में बहुत अच्छा सवाल पूछा आपने। बात ऐसी है कि... `,
+                `${header} को लेकर अक्सर किसान भाई पूछते हैं। देखिए... `,
+                `तो आप ${header} के बारे में जानना चाहते हैं? चलिए शुरू करते हैं... `
+            ]
+        };
 
-        if (!adviceText && (topic !== 'care' && topic !== 'general')) {
-            adviceText = cropData['care'] ? cropData['care'][lang] : null;
+        let scaleAdvice = "";
+        if (scale === 'large' && lang === 'en') {
+            scaleAdvice = "\n\nSince you're managing a **business-scale area**, you definitely want to look into automated irrigation or professional monitoring. Don't let it overwhelm you, bro!";
+        } else if (scale === 'large' && lang === 'hi') {
+            scaleAdvice = "\n\nचूंकि आप **बड़े पैमाने पर खेती** कर रहे हैं, इसलिए आपको सिंचाई और निगरानी के लिए मशीनरी का उपयोग करना चाहिए।";
         }
 
-        if (adviceText) {
-            const cropTitle = crop.charAt(0).toUpperCase() + crop.slice(1);
-            const formattedAdvice = `**${cropTitle} - ${topic.charAt(0).toUpperCase() + topic.slice(1)}**\n\n${adviceText}`;
+        const list = intros[lang] || intros['en'];
+        const intro = list[Math.floor(Math.random() * list.length)];
+        return `${intro}\n\n${content}${scaleAdvice}\n\nI hope that helps you out in the field!`;
+    };
+
+    const scale = detectScale(normalized);
+
+    // Check for specific disease/pest keywords... (Keep the detection logic)
+    let detectedDisease = null;
+    if (knowledgeBase.disease_reference) {
+        for (const [key, data] of Object.entries(knowledgeBase.disease_reference)) {
+            const searchKey = key.replace(/_/g, ' ');
+            if (normalizedLower.includes(searchKey)) {
+                detectedDisease = { key, ...data };
+                break;
+            }
+        }
+    }
+
+    let detectedPest = null;
+    if (knowledgeBase.pest_reference) {
+        for (const [key, data] of Object.entries(knowledgeBase.pest_reference)) {
+            const searchKey = key.replace(/_/g, ' ');
+            if (normalizedLower.includes(searchKey)) {
+                detectedPest = { key, ...data };
+                break;
+            }
+        }
+    }
+
+    // Build Comprehensive Response (STRICT MATCHING)
+    if (crop && knowledgeBase.crops[crop]) {
+        const cropData = knowledgeBase.crops[crop];
+        const cropTitle = crop.charAt(0).toUpperCase() + crop.slice(1);
+        let cropAdvice = cropData[topic] ? cropData[topic][lang] : (cropData['care'] ? cropData['care'][lang] : null);
+
+        if (cropAdvice) {
             return {
-                condition: `Local Wisdom: ${cropTitle}`,
+                condition: 'General',
                 confidence: 'High',
-                recommendation: formattedAdvice
+                recommendation: makeConversational(cropAdvice, cropTitle, scale)
             };
         }
     }
 
-    // 3. Weather-integrated local response (Generic Fallback)
-    // Only used if no history, no crop detected, and simple keywords found.
-    const weatherKeywords = ['weather', 'temperature', 'hot', 'cold', 'rain', 'humidity', 'forecast', 'climate', 'मौसम', 'तापमान', 'बारिश', 'गर्मी', 'ठंड', 'வானிலை', 'வெப்பநிலை', 'மழை'];
-    const wateringKeywords = ['water', 'watering', 'irrigation', 'sinchai', 'pani', 'நீர்ப்பாசனம்', 'தண்ணீர்'];
-
-    const isWeatherQuery = weatherKeywords.some(kw => normalizedLower.includes(kw));
-    const isWateringQuery = wateringKeywords.some(kw => normalizedLower.includes(kw));
-
-    if (weatherContext && (isWeatherQuery || isWateringQuery)) {
-        // ... (existing weather logic)
-        const weatherLabels = {
-            0: { en: 'Clear sky', hi: 'आसमान साफ है', ta: 'தெளிவான வானம்' },
-            1: { en: 'Mainly clear', hi: 'मुख्य रूप से साफ', ta: 'பெரும்பாலும் தெளிவு' },
-            2: { en: 'Partly cloudy', hi: 'आंशिक रूप से बादल', ta: 'ஓரளவு மேகமூட்டம்' },
-            3: { en: 'Overcast', hi: 'बादल छाए हुए हैं', ta: 'மேகமூட்டம்' },
-            61: { en: 'Slight rain', hi: 'हल्की बारिश', ta: 'லேசான மழை' },
-            80: { en: 'Rain showers', hi: 'बारिश की बौछारें', ta: 'மழை' }
+    if (detectedDisease) {
+        const dName = detectedDisease.key.replace(/_/g, ' ').charAt(0).toUpperCase() + detectedDisease.key.replace(/_/g, ' ').slice(1);
+        const content = `${detectedDisease.symptoms[lang] || detectedDisease.symptoms['en']}. Here is the plan: ${detectedDisease.treatment[lang] || detectedDisease.treatment['en']}`;
+        return {
+            condition: 'General',
+            confidence: 'High',
+            recommendation: makeConversational(content, dName, scale)
         };
+    }
 
-        const langNames = { en: 'Weather Advisory', hi: 'मौसम की सलाह', ta: 'வானிலை ஆலோசனை' };
-        const weatherDesc = weatherLabels[weatherContext.condition]?.[lang] || weatherLabels[weatherContext.condition]?.['en'] || 'Current Weather';
+    if (detectedPest) {
+        const pName = detectedPest.key.charAt(0).toUpperCase() + detectedPest.key.slice(1);
+        const content = `${detectedPest.symptoms[lang] || detectedPest.symptoms['en']}. My advice: ${detectedPest.control[lang] || detectedPest.control['en']}`;
+        return {
+            condition: 'General',
+            confidence: 'High',
+            recommendation: makeConversational(content, pName, scale)
+        };
+    }
 
-        let recommendation = '';
-        if (lang === 'ta') {
-            recommendation = `**தற்போதைய வெப்பநிலை:** ${Math.round(weatherContext.temp)}°C\n**நிலை:** ${weatherDesc}\n**ஈரப்பதம்:** ${weatherContext.humidity}%\n\n`;
-            if (isWateringQuery) {
-                recommendation += weatherContext.temp > 30
-                    ? "- வெப்பம் அதிகமாக இருப்பதால், இன்று **கூடுதல் நீர்ப்பாசனம்** தேவைப்படலாம்."
-                    : "- மண்ணின் ஈரப்பதத்தை சரிபார்த்து தேவைப்பட்டால் மட்டும் தண்ணீர் ஊற்றவும்.";
-            }
-        } else if (lang === 'hi') {
-            recommendation = `**वर्तमान तापमान:** ${Math.round(weatherContext.temp)}°C\n**स्थिति:** ${weatherDesc}\n**आर्द्रता:** ${weatherContext.humidity}%\n\n`;
-            if (isWateringQuery) {
-                recommendation += weatherContext.temp > 30
-                    ? "- गर्मी के कारण आज **अतिरिक्त सिंचाई** की सलाह है."
-                    : "- सिंचाई से पहले **मिट्टी की नमी** की जांच कर लें.";
-            }
+    // Skip weather unless specifically asked
+    const weatherKeywords = ['weather', 'rain', 'hot', 'cold', 'temperature', 'humidity'];
+    const askingWeather = weatherKeywords.some(kw => normalizedLower.includes(kw));
+
+    if (weatherContext && askingWeather) {
+        const temp = Math.round(weatherContext.temp);
+        const humidity = weatherContext.humidity;
+
+        let weatherAdvice = "";
+        if (temp > 30) {
+            weatherAdvice = `It's getting quite **hot** out there today, reaching about **${temp}°C**. With humidity at ${humidity}%, your crops are definitely going to feel the thirst. If I were you, I'd give them some extra water, ideally in the early morning to keep them cool through the peak sun.`;
+        } else if (temp < 15) {
+            weatherAdvice = `There's a bit of a **chill** in the air today, around **${temp}°C**. Most crops are fine, but keep an eye on your tropical plants. They don't like the cold any more than we do!`;
         } else {
-            recommendation = `**Current Temperature:** ${Math.round(weatherContext.temp)}°C\n**Condition:** ${weatherDesc}\n**Humidity:** ${weatherContext.humidity}%\n\n`;
-            if (isWateringQuery) {
-                recommendation += weatherContext.temp > 30
-                    ? "- It's quite hot, so your plants likely need **extra water** today.\n- Water in the **early morning** to reduce evaporation."
-                    : "- Check **soil moisture** before watering.\n- Current conditions are moderate.";
-            }
+            weatherAdvice = `The weather is looking **beautiful and moderate** today, about **${temp}°C**. It's a perfect day for some light field work or just checking in on your growth. Humidity is sitting comfortably at ${humidity}%.`;
         }
 
         return {
-            condition: `Local Wisdom: ${langNames[lang] || langNames['en']}`,
+            condition: 'General',
             confidence: 'High',
-            recommendation: recommendation
+            recommendation: makeConversational(weatherAdvice, "Today's Weather", scale)
         };
     }
 
-    // 4. Pattern Match Fallback
-    for (const pattern of CONDITION_PATTERNS) {
-        if (pattern.keywords.some(kw => normalizedLower.includes(kw))) {
-            return {
-                condition: `Local Wisdom: ${pattern.condition}`,
-                confidence: 'Medium',
-                recommendation: pattern.recommendation
-            };
-        }
-    }
+    // 5. Final Fallback (Try AI if English query matched nothing local)
+    // If we reached here, it means NO specific local wisdom matched (Confidence was effectively LOW/0)
+    console.log("⚠️ No specific local wisdom matched. Falling back to AI...");
 
-    // 5. Final AI Attempt (if skipped earlier due to short length)
-    if (process.env.OPENROUTER_API_KEY) {
-        // ... (existing AI fallback)
+    if (process.env.OPENROUTER_API_KEY && process.env.OFFLINE_MODE !== 'true') {
         try {
-            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', lang, conversationHistory);
+            const aiResponse = await getAgriAdvice(normalized, weatherContext, null, 'image/jpeg', 'en', conversationHistory);
             if (aiResponse) {
                 return {
-                    condition: 'AI Assistant',
+                    condition: 'Farmer Assist',
                     confidence: 'High',
                     recommendation: aiResponse.text
                 };
             }
         } catch (e) {
-            console.error('❌ AI Fallback Error:', e);
+            console.error('❌ Final English AI Fallback Error:', e);
         }
     }
 
-    // Final Fallback - only if AI also fails
-    const finalFallbacks = {
-        en: "I couldn't find specific information for that query. Try asking about:\n- **Watering** schedules\n- **Pest** control\n- **Soil** requirements\n- Specific crops like potato, tomato, or dragon fruit",
-        hi: "क्षमा करें, मुझे इसके बारे में जानकारी नहीं मिली। पूछने का प्रयास करें:\n- **सिंचाई** के बारे में\n- **कीट** नियंत्रण\n- **मिट्टी** की आवश्यकताएं",
-        ta: "மன்னிக்கவும், அந்த தகவல் கிடைக்கவில்லை। கேட்டு முயற்சிக்கவும்:\n- **நீர்ப்பாசனம்**\n- **பூச்சி** கட்டுப்பாடு",
-        te: "క్షమించండి, ఆ సమాచారం లేదు. అడిగి చూడండి:\n- **నీరు** పెట్టడం\n- **తెగుళ్ళు**",
-        mr: "क्षमस्व, माहिती मिळाली नाही. विचारून पहा:\n- **पाणी** देणे\n- **कीड** नियंत्रण"
-    };
-
+    // 6. Last Resort (Only if AI fails too)
     return {
-        condition: 'General Advice',
+        condition: 'Standard Response',
         confidence: 'Low',
-        recommendation: finalFallbacks[lang] || finalFallbacks['en']
+        recommendation: "I'm listening, bro! I couldn't find a direct fix in my wisdom files for that specific phrase, but I'm here. Try asking about a crop like **Tomato** or **Watermelon**, or tell me about a pest. If you're farming a big area, I can give you some high-level tips too!"
     };
 }
 
