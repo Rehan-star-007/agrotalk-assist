@@ -22,7 +22,7 @@ export interface MandiApiResponse {
 }
 
 const API_KEY = import.meta.env.VITE_MANDI_API_KEY;
-const BASE_URL = import.meta.env.VITE_MANDI_API_BASE_URL || 'https://api.data.gov.in/resource/9ef275ee-e289-487b-80a2-8c8d8dcb4545';
+const BASE_URL = import.meta.env.VITE_MANDI_API_BASE_URL || 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070';
 
 // Mock data for fallback or development
 const MOCK_RECORDS: MandiPriceRecord[] = [

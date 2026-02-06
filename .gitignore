@@ -34,7 +34,7 @@ backend_py/__pycache__/
 .env
 .env.local
 .env.openrouter
-.env.market
+# .env.market
 .env.nvidia
 
 # Models
