@@ -66,7 +66,7 @@ class NvidiaVisionService:
                 f"RULES:\n"
                 f"1. If the plant is HEALTHY: Simply state 'Healthy' and give a positive description.\n"
                 f"2. If the plant has an ISSUE: Provide a detailed breakdown using these EXACT markers in your text:\n"
-                f"   - **Crop Identified**: [Name of plant/fruit]\n"
+                f"   - **Crop Identified**: [Exact Name of plant/fruit, e.g. Tomato, Maize]\n"
                 f"   - **Disease Name**: [Name of issue]\n"
                 f"   - **How it was formed**: [Detailed explanation of causes]\n"
                 f"   - **Symptoms**: [List bullet points of visual signs]\n"
@@ -196,17 +196,23 @@ class NvidiaVisionService:
         common_crops = [
             "Apple", "Tomato", "Cucumber", "Potato", "Onion", "Grape", "Orange", "Banana", "Lemon", "Mango",
             "Pepper", "Chill", "Strawberry", "Corn", "Maize", "Rice", "Wheat", "Soybean", "Pomegranate",
-            "Guava", "Papaya", "Brinjal", "Eggplant", "Cabbage", "Cauliflower", "Rosemary", "Tulsi", "Neem"
+            "Guava", "Papaya", "Brinjal", "Eggplant", "Cabbage", "Cauliflower", "Rosemary", "Tulsi", "Neem",
+            "Pea", "Peas"
         ]
 
         # Helper to extract crop from any block of text
         def extract_crop_name(block):
+            # Words to explicitly IGNORE if matched by regex
+            ignored_words = {"fungal", "bacterial", "viral", "disease", "infection", "severe", "common", "issue", "problem", "leaf", "plant"}
+            
             # 1. Check for regex patterns
             match = re.search(r'(?:in|of|on|identified as|is a|occurs in|analysis of)\s+([a-zA-Z]{3,20})', block, re.IGNORECASE)
             if match:
                 found = match.group(1).capitalize()
-                found = re.sub(r's$|es$|leaf$|leaves$', '', found, flags=re.IGNORECASE)
-                if len(found) >= 3: return found
+                found = re.sub(r"'s$|s$|es$|leaf$|leaves$", '', found, flags=re.IGNORECASE)
+                
+                if len(found) >= 3 and found.lower() not in ignored_words: 
+                    return found
             
             # 2. Check for explicit keywords from our list
             for crop in common_crops:

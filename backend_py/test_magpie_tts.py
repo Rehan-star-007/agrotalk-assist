@@ -12,7 +12,8 @@ async def test_multilingual_tts():
     service = NvidiaTTSService()
     
     test_cases = [
-        ("en", "Hello, welcome to AgroTalk Assistant.")
+        ("en", "Hello, welcome to AgroTalk Assistant."),
+        ("en", "I'm sorry to hear about the Ascochyta blight.")
     ]
     
     output_dir = Path("test_audio")
@@ -21,13 +22,14 @@ async def test_multilingual_tts():
     print("🚀 Starting Multilingual TTS Test...")
     
     for lang, text in test_cases:
-        print(f"Testing {lang}...")
+        print(f"Testing {lang} with '{text[:20]}...'")
         audio_data = await service.generate_audio(text, language=lang)
         
         if audio_data:
-            file_path = output_dir / f"test_{lang}.mp3"
+            safe_text = "".join(c for c in text[:10] if c.isalnum())
+            file_path = output_dir / f"test_{lang}_{safe_text}.wav"
             with open(file_path, "wb") as f:
-                f.read(audio_data) if isinstance(audio_data, bytes) else f.write(audio_data)
+                f.write(audio_data)
             print(f"✅ Saved {file_path}")
         else:
             print(f"❌ Failed to generate audio for {lang}")

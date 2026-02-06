@@ -1,45 +1,73 @@
 import os
 import wave
 import io
-import riva.client
+import tempfile
 from dotenv import load_dotenv
 from typing import Optional
 
 load_dotenv()
 
+# Try to import riva.client (may fail if not installed for Edge-only mode)
+try:
+    import riva.client
+    RIVA_AVAILABLE = True
+except ImportError:
+    RIVA_AVAILABLE = False
+
+# Try to import edge-tts for fallback
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:
+    EDGE_TTS_AVAILABLE = False
+
 class NvidiaTTSService:
-    """NVIDIA Magpie TTS service using gRPC Riva client."""
+    """NVIDIA Magpie TTS service with Edge TTS fallback for unsupported languages."""
     
     def __init__(self):
         self.api_key = os.getenv("NVIDIA_TTS_KEY")
         self.function_id = os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
         self.server = "grpc.nvcf.nvidia.com:443"
         
-        # Language code to NVIDIA locale mapping
-        self.LANG_CODE_MAP = {
-            "en": "EN-US",
-            "hi": "EN-US",  # Hindi text spoken with English voice (cross-lingual)
-            "ta": "EN-US",  # Tamil text spoken with English voice
-            "te": "EN-US",  # Telugu text spoken with English voice
-            "mr": "EN-US",  # Marathi text spoken with English voice
-            "es": "ES-US",
-            "fr": "FR-FR",
-            "de": "DE-DE",
-            "zh": "ZH-CN",
-            "vi": "VI-VN",
-            "it": "IT-IT"
+        # NVIDIA Magpie Multilingual - Testing shows ONLY English is available
+        # All other languages (Indian, European, Asian) fall back to Edge TTS
+        self.NVIDIA_SUPPORTED_LANGS = {"en"}
+        
+        # Language code to NVIDIA locale mapping (only English confirmed working)
+        self.NVIDIA_LANG_CODE_MAP = {
+            "en": "EN-US"
         }
         
-        # Voice personality options (all female)
+        # Edge TTS voice mapping for ALL languages (especially Indian)
+        self.EDGE_VOICE_MAP = {
+            "en": "en-US-ChristopherNeural",
+            "hi": "hi-IN-MadhurNeural",
+            "ta": "ta-IN-ValluvarNeural",
+            "te": "te-IN-MohanNeural",
+            "mr": "mr-IN-ManoharNeural",
+            "es": "es-US-AlonsoNeural",
+            "fr": "fr-FR-HenriNeural",
+            "de": "de-DE-ConradNeural",
+            "it": "it-IT-DiegoNeural",
+            "pt": "pt-BR-AntonioNeural",
+            "zh": "zh-CN-YunxiNeural",
+            "vi": "vi-VN-NamMinhNeural"
+        }
+        
+        # Voice personality options (all female) for NVIDIA
         self.VOICE_PERSONALITIES = ["mia", "aria", "sofia", "louise", "isabela"]
         
-        if self.api_key:
-            print(f"🟢 NVIDIA TTS Service initialized (gRPC)")
+        if self.api_key and RIVA_AVAILABLE:
+            print(f"🟢 NVIDIA TTS Service initialized (gRPC) with Edge TTS fallback")
+        elif EDGE_TTS_AVAILABLE:
+            print("🟡 NVIDIA TTS unavailable. Using Edge TTS for all languages.")
         else:
-            print("🟡 NVIDIA_TTS_KEY not found. TTS will be disabled.")
+            print("❌ No TTS service available. Please install edge-tts.")
 
     def _get_riva_service(self):
         """Create authenticated Riva TTS service."""
+        if not RIVA_AVAILABLE:
+            return None
         auth = riva.client.Auth(
             uri=self.server,
             use_ssl=True,
@@ -52,37 +80,60 @@ class NvidiaTTSService:
 
     def _get_voice_name(self, language: str, voice: str = "mia") -> str:
         """Build NVIDIA voice name from language and voice personality."""
-        locale = self.LANG_CODE_MAP.get(language, "EN-US")
+        locale = self.NVIDIA_LANG_CODE_MAP.get(language, "EN-US")
         voice_name = voice.capitalize() if voice.lower() in self.VOICE_PERSONALITIES else "Mia"
         return f"Magpie-Multilingual.{locale}.{voice_name}"
 
-    async def generate_audio(self, text: str, language: str = "en", voice: str = "mia") -> Optional[bytes]:
-        """
-        Generates audio using NVIDIA Magpie TTS via gRPC.
-        Returns WAV audio bytes.
+    async def _generate_edge_audio(self, text: str, language: str) -> Optional[bytes]:
+        """Generate audio using Edge TTS (fallback for unsupported languages)."""
+        if not EDGE_TTS_AVAILABLE:
+            print("❌ Edge TTS not available. Cannot generate audio.")
+            return None
         
-        Args:
-            text: Text to synthesize
-            language: Language code (en, hi, ta, te, mr)
-            voice: Voice personality (mia, aria, sofia)
-        """
-        if not self.api_key:
-            print("❌ NVIDIA TTS API Key missing.")
+        voice = self.EDGE_VOICE_MAP.get(language, "en-US-ChristopherNeural")
+        print(f"🎤 [Edge TTS] Generating: '{text[:40]}...' ({language}, {voice})")
+        
+        try:
+            communicate = edge_tts.Communicate(text, voice)
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+            
+            await communicate.save(tmp_path)
+            
+            with open(tmp_path, "rb") as f:
+                audio_data = f.read()
+            
+            os.unlink(tmp_path)
+            print(f"✅ [Edge TTS] Generated {len(audio_data)} bytes of audio")
+            return audio_data
+        except Exception as e:
+            print(f"❌ Edge TTS Error: {e}")
             return None
 
+    async def _generate_nvidia_audio(self, text: str, language: str, voice: str) -> Optional[bytes]:
+        """Generate audio using NVIDIA Magpie TTS via gRPC."""
         voice_name = self._get_voice_name(language, voice)
-        # For gRPC language_code, we use the locale exactly as defined in the map (e.g., "en-US")
-        language_code = self.LANG_CODE_MAP.get(language, "EN-US")
+        # Get locale for voice name construction (e.g., "EN-US")
+        locale = self.NVIDIA_LANG_CODE_MAP.get(language, "EN-US")
         
-        # Sanitize text to remove potential problematic characters (emojis, etc that cause Mapping failed)
-        # Basic cleaning: remove characters that might not be in the model's charset if necessary
-        # For now, let's trust the input mostly but ensure it's a string
+        # The API expects lowercase language codes (e.g., "en-US", "es-US")
+        # but the voice name uses uppercase (e.g., "EN-US", "ES-US")
+        # Convert the locale to proper casing: first part lowercase, second uppercase
+        parts = locale.split("-")
+        if len(parts) == 2:
+            language_code = f"{parts[0].lower()}-{parts[1].upper()}"
+        else:
+            language_code = locale.lower()
+            
         clean_text = str(text).strip()
         
         print(f"🎤 [NVIDIA gRPC] TTS for '{clean_text[:40]}...' (lang: {language_code}, voice: {voice_name})")
-
+        
         try:
             service = self._get_riva_service()
+            if not service:
+                print("❌ NVIDIA Riva service not available.")
+                return None
             
             resp = service.synthesize(
                 text=clean_text,
@@ -109,3 +160,34 @@ class NvidiaTTSService:
                 error_msg = e.details()
             print(f"❌ NVIDIA TTS Error: {error_msg}")
             return None
+
+    async def generate_audio(self, text: str, language: str = "en", voice: str = "mia") -> Optional[bytes]:
+        """
+        Generates audio using NVIDIA TTS for supported languages (Western),
+        or falls back to Edge TTS for unsupported languages (Indian).
+        
+        Args:
+            text: Text to synthesize
+            language: Language code (en, hi, ta, te, mr, es, fr, de, it, pt, zh, vi)
+            voice: Voice personality (mia, aria, sofia) - only for NVIDIA
+            
+        Returns:
+            Audio bytes (WAV for NVIDIA, MP3 for Edge TTS), or None on failure.
+        """
+        lang = language.lower()
+        
+        # Check if language is supported by NVIDIA Magpie
+        if lang in self.NVIDIA_SUPPORTED_LANGS and self.api_key and RIVA_AVAILABLE:
+            # Use NVIDIA TTS for supported Western languages
+            audio = await self._generate_nvidia_audio(text, lang, voice)
+            if audio:
+                return audio
+            # Fall back to Edge if NVIDIA fails
+            print("⚠️ NVIDIA TTS failed. Falling back to Edge TTS...")
+        else:
+            # Language not supported by NVIDIA (e.g., Hindi, Tamil, Telugu, Marathi)
+            print(f"ℹ️ Language '{lang}' not supported by NVIDIA. Using Edge TTS...")
+        
+        # Fallback to Edge TTS
+        return await self._generate_edge_audio(text, lang)
+

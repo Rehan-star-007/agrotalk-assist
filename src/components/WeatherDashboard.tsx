@@ -135,7 +135,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
   const formattedToday = formatDate(today.toISOString(), language);
 
   return (
-    <div className="mb-6">
+    <div className="mb-4">
       {/* Green Weather Card with Expandable Forecast */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
@@ -144,18 +144,18 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
           isExpanded ? "shadow-apple-lg" : ""
         )}
       >
-        <div className="p-5">
+        <div className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 opacity-80 mb-1">
+              <div className="flex items-center gap-2 opacity-80 mb-0.5">
                 <MapPin size={14} />
                 <p className="text-subhead font-semibold">{formattedToday.day}, {formattedToday.date} {formattedToday.month}</p>
               </div>
-              <p className="text-display font-bold">{Math.round(data.current.temperature_2m)}°C</p>
-              <p className="text-subhead font-medium opacity-90 mt-1">{currentLabel}</p>
+              <p className="text-display font-bold leading-tight">{Math.round(data.current.temperature_2m)}°C</p>
+              <p className="text-subhead font-medium opacity-90">{currentLabel}</p>
             </div>
 
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-end gap-1">
               <WeatherIcon code={data.current.weather_code} size="lg" isNight={isNight} />
               <div className="flex items-center gap-1 text-subhead opacity-80">
                 <Droplets size={16} />
@@ -164,7 +164,7 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-center mt-3 pt-2 text-white/60">
+          <div className="flex items-center justify-center mt-1 text-white/60">
             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </div>
         </div>

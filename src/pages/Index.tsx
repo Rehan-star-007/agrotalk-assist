@@ -241,9 +241,10 @@ export default function Index() {
   };
 
   const processResponse = async (text: string) => {
-    if (!conversationId) {
-      const newId = `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
-      setConversationId(newId);
+    let currentConvId = conversationId;
+    if (!currentConvId) {
+      currentConvId = `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+      setConversationId(currentConvId);
     }
 
     addMessage('user', text);
@@ -256,7 +257,7 @@ export default function Index() {
         humidity: weatherData.current.relative_humidity_2m
       } : undefined;
 
-      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId, selectedVoice);
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, currentConvId, selectedVoice);
 
       if (result.success && result.advisory) {
         addMessage('assistant', result.advisory.recommendation, result.advisory.condition);
@@ -373,6 +374,70 @@ export default function Index() {
     return ph[language] || ph.en;
   };
 
+  const handleRecentQueryClick = (item: any) => {
+    setIsChatMode(true);
+    // Restore conversation ID if available to continue the thread
+    if (item.conversationId) {
+      setConversationId(item.conversationId);
+    }
+
+    let messages: ChatMessage[] = [];
+
+    // Check if we have the full message history (grouped conversation)
+    if (item.messages && Array.isArray(item.messages)) {
+      messages = item.messages.flatMap((m: any) => [
+        {
+          id: `user_${m.id}`,
+          role: 'user',
+          content: m.query,
+          timestamp: new Date(m.timestamp)
+        },
+        {
+          id: `assistant_${m.id}`,
+          role: 'assistant',
+          content: m.response,
+          timestamp: new Date(new Date(m.timestamp).getTime() + 1000),
+          condition: undefined
+        }
+      ]).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    } else {
+      // Fallback for legacy single items
+      messages = [
+        {
+          id: `user_${item.id}`,
+          role: 'user',
+          content: item.query,
+          timestamp: item.timestamp
+        },
+        {
+          id: `assistant_${item.id}`,
+          role: 'assistant',
+          content: item.response,
+          timestamp: new Date(item.timestamp.getTime() + 1000), // add 1s for ordering
+          condition: undefined
+        }
+      ];
+    }
+
+    setChatMessages(messages);
+
+    // Update conversation context so AI remembers what was said
+    const historyContext = messages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content
+    })).slice(-10); // Keep last 10 turns for context
+
+    setConversationHistory(historyContext);
+
+    // Play audio of the LATEST response
+    const latestResponse = messages.filter(m => m.role === 'assistant').pop();
+    if (latestResponse) {
+      setTimeout(() => {
+        speakText(latestResponse.content, latestResponse.id);
+      }, 500);
+    }
+  };
+
   // Home Screen with integrated chat
   const renderHomeScreen = () => {
     const allItems = [
@@ -386,11 +451,13 @@ export default function Index() {
       })),
       ...chatHistory.map(item => ({
         id: item.id,
+        conversationId: item.conversationId,
         query: item.query,
         response: item.response,
         timestamp: new Date(item.timestamp),
         cropType: 'general' as const,
-        type: 'chat'
+        type: 'chat',
+        messages: item.messages // Preserve full history
       }))
     ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
@@ -713,8 +780,9 @@ export default function Index() {
                   response={item.response}
                   timestamp={item.timestamp}
                   cropType={item.cropType}
-                  onPlay={() => { }}
-                  isPlaying={false}
+                  onClick={() => handleRecentQueryClick(item)}
+                  onPlay={() => handleRecentQueryClick(item)}
+                  isPlaying={currentPlayingId === `assistant_${item.id}`}
                 />
               ))
             ) : (
@@ -732,21 +800,38 @@ export default function Index() {
     setIsImageOpen(false);
     setIsChatMode(true);
 
-    // Create a context summary for the AI
-    const contextText = language === "hi"
-      ? `विषय: ${analysis.cropTypeHi}\nरोग: ${analysis.diseaseNameHi}\nलक्षण: ${analysis.symptomsHi?.join(", ")}\nउपचार: ${analysis.treatmentHi?.join(", ")}`
-      : `Subject: ${analysis.cropType}\nCondition: ${analysis.diseaseName}\nSymptoms: ${analysis.symptoms?.join(", ")}\nTreatment: ${analysis.treatment_steps?.join(", ")}`;
+    // Get translations for the current language
+    const tLib = getTranslation('library', language);
 
-    const introMsg = language === "hi"
-      ? `मैंने अपनी ${analysis.cropTypeHi} की जांच साझा की है। मुझे इसके बारे में कुछ पूछना है।`
-      : `I've shared my analysis for ${analysis.cropType}. I have some questions about it.`;
+    // Determine the crop name based on language - use localized for current lang
+    const cropName = (language === 'hi' || language === 'ta' || language === 'te' || language === 'mr')
+      ? (analysis.cropTypeHi || analysis.crop_identified)
+      : (analysis.cropType || analysis.crop_identified);
+
+    const diseaseName = (language === 'hi' || language === 'ta' || language === 'te' || language === 'mr')
+      ? (analysis.diseaseNameHi || analysis.disease_name_hindi)
+      : (analysis.diseaseName || analysis.disease_name);
+
+    const symptoms = (language === 'hi' || language === 'ta' || language === 'te' || language === 'mr')
+      ? (analysis.symptomsHi || analysis.symptoms_hindi)
+      : (analysis.symptoms || analysis.symptoms);
+
+    const treatment = (language === 'hi' || language === 'ta' || language === 'te' || language === 'mr')
+      ? (analysis.treatmentHi || analysis.treatment_steps_hindi)
+      : (analysis.treatment || analysis.treatment_steps);
+
+    // Create a context summary for the AI using translations
+    const contextText = `${tLib.shareSubject}: ${cropName}\n${tLib.shareCondition}: ${diseaseName}\n${tLib.shareSymptoms}: ${symptoms?.join(", ")}\n${tLib.shareTreatment}: ${treatment?.join(", ")}`;
+
+    // Intro message using translation template
+    const introMsg = tLib.shareIntro.replace('{crop}', cropName);
 
     // Add the analysis as a system-like context message and the user intro
     const newMessages: ChatMessage[] = [
       {
         id: `context_${Date.now()}`,
         role: 'assistant',
-        content: `**Analysis Context Shared:**\n\n${contextText}`,
+        content: `**${tLib.shareTitle}**\n\n${contextText}`,
         timestamp: new Date(),
         condition: analysis.severity
       },
@@ -763,11 +848,11 @@ export default function Index() {
     // Update conversation history for LLM context
     setConversationHistory(prev => [
       ...prev,
-      { role: 'assistant' as const, content: `CONTEXT: User shared a ${analysis.cropType} analysis showing ${analysis.diseaseName}. Severity: ${analysis.severity}. Details: ${analysis.description}` },
+      { role: 'assistant' as const, content: `CONTEXT: User shared a ${analysis.cropType || analysis.crop_identified} analysis showing ${analysis.diseaseName || analysis.disease_name}. Severity: ${analysis.severity}. Details: ${analysis.description || analysis.summary}` },
       { role: 'user' as const, content: introMsg }
     ].slice(-10));
 
-    toast.success(language === "hi" ? "चैट में विश्लेषण जोड़ा गया" : "Analysis added to chat context");
+    toast.success(getTranslation('common', language).success || "Analysis added to chat context");
   };
 
   return (
@@ -777,7 +862,15 @@ export default function Index() {
       <main className={cn("flex-1 flex flex-col", !isOnline ? "pt-14" : "", isChatMode && activeTab === "home" ? "h-screen" : "")}>
         {activeTab === "home" && renderHomeScreen()}
         {activeTab === "library" && (
-          <LibraryScreen language={language} weatherData={weatherData} isWeatherLoading={isWeatherLoading} />
+          <LibraryScreen
+            language={language}
+            weatherData={weatherData}
+            isWeatherLoading={isWeatherLoading}
+            onShareChat={(analysis) => {
+              handleShareToChat(analysis);
+              setActiveTab("home");
+            }}
+          />
         )}
         {activeTab === "settings" && (
           <SettingsScreen language={language} onLanguageChange={setLanguage} voiceSpeed={voiceSpeed} onVoiceSpeedChange={setVoiceSpeed} />

@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2, Sun, Moon, CloudRain, CloudSnow, Wind } from "lucide-react";
+import { Search, X, CheckCircle, Clock, ChevronRight, Camera, Leaf, AlertCircle, Play, Cloud, Droplets, Trash2, Edit2, Sun, Moon, CloudRain, CloudSnow, Wind, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { useLibrary, LibraryItem } from "@/hooks/useLibrary";
 import { toast } from "sonner";
+import { getTranslation } from "@/lib/translations";
 
 interface WeatherData {
   current: {
@@ -18,74 +19,54 @@ interface LibraryScreenProps {
   language: string;
   weatherData?: WeatherData | null;
   isWeatherLoading?: boolean;
+  onShareChat?: (analysis: LibraryItem) => void;
 }
 
-const translations = {
+const internalTranslations = {
   en: {
     title: "Analysis History",
-    subtitle: "analyses performed",
     search: "Search by crop, disease, or date...",
-    filters: {
-      all: "All",
-      healthy: "Healthy",
-      diseased: "Diseased",
-      thisWeek: "This Week",
-    },
-    stats: {
-      total: "Total Scans",
-      diseases: "Issues Found",
-      healthy: "Healthy",
-    },
-    empty: {
-      title: "No analyses yet",
-      description: "Capture your first plant image to start tracking its health",
-      cta: "Start Your First Analysis",
-    },
-    viewDetails: "View Details",
     ago: "ago",
     today: "Today",
     yesterday: "Yesterday",
     days: "days",
     weather: "Today's Weather",
-    partlyCloudy: "Partly Cloudy",
-    clearSky: "Clear Sky",
-    cloudy: "Cloudy",
-    rainy: "Rainy",
-    snowy: "Snowy",
-    loading: "Loading...",
   },
   hi: {
     title: "विश्लेषण इतिहास",
-    subtitle: "विश्लेषण किए गए",
     search: "फसल, रोग या तारीख से खोजें...",
-    filters: {
-      all: "सभी",
-      healthy: "स्वस्थ",
-      diseased: "रोगग्रस्त",
-      thisWeek: "इस सप्ताह",
-    },
-    stats: {
-      total: "कुल स्कैन",
-      diseases: "समस्याएं मिलीं",
-      healthy: "स्वस्थ",
-    },
-    empty: {
-      title: "अभी तक कोई विश्लेषण नहीं",
-      description: "पौधों के स्वास्थ्य की निगरानी शुरू करने के लिए पहली छवि कैप्चर करें",
-      cta: "पहला विश्लेषण शुरू करें",
-    },
-    viewDetails: "विवरण देखें",
     ago: "पहले",
     today: "आज",
     yesterday: "कल",
     days: "दिन",
     weather: "आज का मौसम",
-    partlyCloudy: "आंशिक बादल",
-    clearSky: "साफ आसमान",
-    cloudy: "बादल",
-    rainy: "बारिश",
-    snowy: "बर्फबारी",
-    loading: "लोड हो रहा है...",
+  },
+  ta: {
+    title: "பகுப்பாய்வு வரலாறு",
+    search: "பயிர், நோய் அல்லது தேதியால் தேடுங்கள்...",
+    ago: "முன்",
+    today: "இன்று",
+    yesterday: "நேற்று",
+    days: "நாட்கள்",
+    weather: "இன்றைய வானிலை",
+  },
+  te: {
+    title: "విశ్లేషణ చరిత్ర",
+    search: "పంట, వ్యాధి లేదా తేదీ ద్వారా వెతకండి...",
+    ago: "క్రితం",
+    today: "ఈ రోజు",
+    yesterday: "నిన్న",
+    days: "రోజులు",
+    weather: "ఈ రోజు వాతావరణం",
+  },
+  mr: {
+    title: "विश्लेषण इतिहास",
+    search: "पीक, रोग किंवा तारीख शोधा...",
+    ago: "पूर्वी",
+    today: "आज",
+    yesterday: "काल",
+    days: "दिवस",
+    weather: "आजचे हवामान",
   },
 };
 
@@ -114,7 +95,7 @@ const WeatherIcon: React.FC<{ code: number; isNight?: boolean }> = ({ code, isNi
   return <Cloud size={48} className="opacity-90" />;
 };
 
-export function LibraryScreen({ language, weatherData, isWeatherLoading }: LibraryScreenProps) {
+export function LibraryScreen({ language, weatherData, isWeatherLoading, onShareChat }: LibraryScreenProps) {
   const { items, deleteItem, updateItem, isLoading } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -123,7 +104,9 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
   const [editDisease, setEditDisease] = useState("");
   const [editCrop, setEditCrop] = useState("");
 
-  const t = translations[language as keyof typeof translations] || translations.en;
+  const tLib = getTranslation('library', language);
+  const tCommon = getTranslation('common', language);
+  const internalT = internalTranslations[language as keyof typeof internalTranslations] || internalTranslations.en;
   const isHindi = language === "hi";
 
   const formatTime = (dateStr: string) => {
@@ -132,9 +115,9 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / 86400000);
 
-    if (days === 0) return t.today;
-    if (days === 1) return t.yesterday;
-    return `${days} ${t.days} ${t.ago}`;
+    if (days === 0) return internalT.today;
+    if (days === 1) return internalT.yesterday;
+    return `${days} ${internalT.days} ${internalT.ago}`;
   };
 
   const filteredItems = items.filter(item => {
@@ -188,10 +171,10 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
   };
 
   const filters: { id: FilterType; label: string }[] = [
-    { id: "all", label: t.filters.all },
-    { id: "healthy", label: t.filters.healthy },
-    { id: "diseased", label: t.filters.diseased },
-    { id: "thisWeek", label: t.filters.thisWeek },
+    { id: "all", label: tLib.filterAll },
+    { id: "healthy", label: tLib.filterHealthy },
+    { id: "diseased", label: tLib.filterDiseased },
+    { id: "thisWeek", label: tLib.filterWeek },
   ];
 
   const showEmpty = items.length === 0;
@@ -212,10 +195,10 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
       <div className="px-5 pt-6 pb-4 bg-background border-b border-border">
         <div className="flex items-center gap-2 mb-1">
           <Leaf className="w-6 h-6 text-primary" />
-          <h1 className="text-title-lg font-bold text-foreground">{t.title}</h1>
+          <h1 className="text-title-lg font-bold text-foreground">{tLib.title}</h1>
         </div>
         <p className="text-subhead text-muted-foreground">
-          {items.length} {t.subtitle}
+          {items.length} {tLib.subtitle}
         </p>
       </div>
 
@@ -224,9 +207,9 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
         <div className="bg-gradient-to-br from-primary to-primary/80 rounded-apple-lg p-5 text-primary-foreground shadow-green">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-subhead opacity-80">{t.weather}</p>
+              <p className="text-subhead opacity-80">{internalT.weather}</p>
               {isWeatherLoading ? (
-                <p className="text-display font-bold mt-1 animate-pulse">{t.loading}</p>
+                <p className="text-display font-bold mt-1 animate-pulse">{tCommon.loading}</p>
               ) : temperature !== null ? (
                 <>
                   <p className="text-display font-bold mt-1">{Math.round(temperature)}°C</p>
@@ -257,7 +240,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t.search}
+            placeholder={tLib.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
@@ -300,17 +283,17 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
         <div className="grid grid-cols-3 gap-3">
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <Leaf className="w-5 h-5 text-primary mx-auto mb-1" />
-            <p className="text-caption text-muted-foreground">{t.stats.total}</p>
+            <p className="text-caption text-muted-foreground">{tLib.totalScans}</p>
             <p className="text-headline font-bold text-foreground">{stats.total}</p>
           </div>
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <AlertCircle className="w-5 h-5 text-destructive mx-auto mb-1" />
-            <p className="text-caption text-muted-foreground">{t.stats.diseases}</p>
+            <p className="text-caption text-muted-foreground">{tLib.diseasesFound}</p>
             <p className="text-headline font-bold text-foreground">{stats.diseases}</p>
           </div>
           <div className="p-3 bg-card rounded-apple border border-border text-center">
             <CheckCircle className="w-5 h-5 text-primary mx-auto mb-1" />
-            <p className="text-caption text-muted-foreground">{t.stats.healthy}</p>
+            <p className="text-caption text-muted-foreground">{tLib.healthyPlants}</p>
             <p className="text-headline font-bold text-foreground">{stats.healthy}</p>
           </div>
         </div>
@@ -321,11 +304,11 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
             <div className="w-32 h-32 rounded-full bg-green-wash flex items-center justify-center mb-6">
               <Leaf className="w-16 h-16 text-primary/50" />
             </div>
-            <h3 className="text-title font-bold text-foreground mb-2">{t.empty.title}</h3>
-            <p className="text-body text-muted-foreground mb-6 max-w-xs">{t.empty.description}</p>
+            <h3 className="text-title font-bold text-foreground mb-2">{tLib.emptyTitle}</h3>
+            <p className="text-body text-muted-foreground mb-6 max-w-xs">{tLib.emptySubtitle}</p>
             <Button className="h-12 px-8 rounded-apple bg-primary hover:bg-primary/90 shadow-green">
               <Camera className="mr-2 h-5 w-5" />
-              {t.empty.cta}
+              {tLib.startFirst}
             </Button>
           </div>
         ) : (
@@ -441,7 +424,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                         onClick={() => setSelectedItem(analysis)}
                         className="flex items-center gap-1 text-subhead font-semibold text-primary hover:underline"
                       >
-                        {t.viewDetails}
+                        {tLib.viewDetails}
                         <ChevronRight size={16} />
                       </button>
                     </div>
@@ -462,17 +445,17 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
               <X className="w-6 h-6" />
             </Button>
             <div className="text-center">
-              <h2 className="text-headline font-bold text-foreground">Analysis Details</h2>
+              <h2 className="text-headline font-bold text-foreground">{tLib.analysisDetails}</h2>
               <p className="text-caption text-muted-foreground">{isHindi ? selectedItem.cropTypeHi : selectedItem.cropType}</p>
             </div>
             <div className="w-10" /> {/* Spacer */}
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-20">
-            <div className="relative w-full aspect-video rounded-apple-xl overflow-hidden border-2 border-primary shadow-green">
+            <div className="relative w-full max-w-sm mx-auto aspect-square rounded-apple-xl overflow-hidden border-2 border-primary shadow-green">
               <img src={selectedItem.thumbnail} className="w-full h-full object-cover" alt="Scan" />
               <div className="absolute top-3 right-3 glass px-3 py-1 rounded-full text-[11px] font-bold text-primary">
-                {selectedItem.confidence}% Confidence
+                {selectedItem.confidence}% {tLib.confidence}
               </div>
             </div>
 
@@ -485,13 +468,13 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
                 <p className={cn("text-headline font-bold", selectedItem.severity === "low" ? "text-primary" : "text-destructive")}>
                   {isHindi ? selectedItem.diseaseNameHi : selectedItem.diseaseName}
                 </p>
-                <p className="text-caption text-muted-foreground uppercase tracking-widest">{selectedItem.severity} Severity</p>
+                <p className="text-caption text-muted-foreground uppercase tracking-widest">{selectedItem.severity === "low" ? tLib.healthy : tLib.issue} {tLib.severity}</p>
               </div>
             </div>
 
             <div className="space-y-4 text-body text-muted-foreground leading-relaxed">
               <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Description</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.description}</p>
                 <p className="bg-muted/30 p-4 rounded-apple-lg border border-border">
                   {isHindi ? selectedItem.descriptionHi || selectedItem.summaryHi : selectedItem.description || selectedItem.summary}
                 </p>
@@ -499,7 +482,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
 
               {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms) && (isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Symptoms</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.shareSymptoms}</p>
                   <div className="space-y-2">
                     {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.map((s, i) => (
                       <div key={i} className="flex gap-3 items-start bg-card p-3 rounded-apple border border-border">
@@ -513,7 +496,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
 
               {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment) && (isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Treatment Plan</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.treatmentPlan}</p>
                   <div className="bg-slate-900 p-5 rounded-apple-xl space-y-4">
                     {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.map((t, i) => (
                       <div key={i} className="flex gap-3">
@@ -526,12 +509,27 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading }: Libra
               )}
             </div>
 
-            <Button
-              className="w-full h-14 rounded-apple-lg bg-primary text-white font-bold"
-              onClick={() => setSelectedItem(null)}
-            >
-              Close Details
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 h-14 rounded-apple-lg border-primary text-primary font-bold hover:bg-primary/5"
+                onClick={() => {
+                  if (onShareChat && selectedItem) {
+                    onShareChat(selectedItem);
+                    setSelectedItem(null);
+                  }
+                }}
+              >
+                <Share2 className="mr-2 h-5 w-5" />
+                {tLib.shareToChat}
+              </Button>
+              <Button
+                className="flex-1 h-14 rounded-apple-lg bg-primary text-white font-bold"
+                onClick={() => setSelectedItem(null)}
+              >
+                {tLib.closeDetails}
+              </Button>
+            </div>
           </div>
         </div>
       )}

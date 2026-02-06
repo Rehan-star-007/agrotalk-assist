@@ -1,5 +1,11 @@
-import { Check, Trash2, HelpCircle, Info, Volume2, ChevronRight, Globe, Zap, Cloud, Database, Star, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Volume2, Globe, Moon, Sun, Trash2, Bell, ChevronRight,
+  MapPin, Zap, HardDrive, RefreshCw
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChat } from "@/hooks/useChat";
+import { toast } from "sonner";
 
 interface SettingsScreenProps {
   language: string;
@@ -19,131 +25,125 @@ const languages = [
 const translations = {
   en: {
     settings: "Settings",
-    preferences: "Preferences",
+    common: "Common",
+    appearance: "Appearance",
+    storage: "Storage & Data",
     language: "Language",
     voiceSpeed: "Voice Speed",
+    darkMode: "Dark Mode",
+    notifications: "Notifications",
+    location: "My Location",
+    locationDesc: "Used for weather alerts",
+    dataSaver: "Data Saver Mode",
+    dataSaverDesc: "Reduce image quality to save data",
+    clearHistory: "Clear Chat History",
+    clearCache: "Clear App Cache",
+    clearConfirm: "Are you sure? This action cannot be undone.",
+    version: "Version",
     slow: "Slow",
     normal: "Normal",
     fast: "Fast",
-    dataPrivacy: "Data & Privacy",
-    offlineMode: "Offline Mode",
-    offlineDesc: "Use cached data when disconnected",
-    autoSave: "Auto-Save Results",
-    autoSaveDesc: "Automatically save all analysis results",
-    storage: "Storage Used",
-    clearHistory: "Clear All History",
-    aboutSupport: "About & Support",
-    version: "Version",
-    help: "Help Center",
-    terms: "Terms & Privacy Policy",
-    rate: "Rate Agrotalk Assist",
+    cleared: "Cleared successfully",
+    cacheSize: "14.2 MB used",
+    detecting: "Detecting..."
   },
   hi: {
     settings: "सेटिंग्स",
-    preferences: "प्राथमिकताएं",
+    common: "सामान्य",
+    appearance: "दिखावट",
+    storage: "स्टोरेज और डेटा",
     language: "भाषा",
     voiceSpeed: "आवाज की गति",
+    darkMode: "डार्क मोड",
+    notifications: "सूचनाएं",
+    location: "मेरा स्थान",
+    locationDesc: "मौसम अलर्ट के लिए उपयोग किया जाता है",
+    dataSaver: "डेटा सेवर मोड",
+    dataSaverDesc: "डेटा बचाने के लिए इमेज क्वालिटी कम करें",
+    clearHistory: "चैट इतिहास साफ़ करें",
+    clearCache: "ऐप कैश साफ़ करें",
+    clearConfirm: "क्या आप सुनिश्चित हैं?",
+    version: "संस्करण",
     slow: "धीमी",
     normal: "सामान्य",
     fast: "तेज़",
-    dataPrivacy: "डेटा और गोपनीयता",
-    offlineMode: "ऑफ़लाइन मोड",
-    offlineDesc: "डिस्कनेक्ट होने पर कैश्ड डेटा का उपयोग करें",
-    autoSave: "स्वत: सहेजें",
-    autoSaveDesc: "सभी विश्लेषण परिणाम स्वचालित रूप से सहेजें",
-    storage: "उपयोग किया गया स्टोरेज",
-    clearHistory: "सभी इतिहास साफ़ करें",
-    aboutSupport: "जानकारी और सहायता",
-    version: "संस्करण",
-    help: "सहायता केंद्र",
-    terms: "नियम और गोपनीयता नीति",
-    rate: "ऐप को रेट करें",
+    cleared: "सफलतापूर्वक साफ़ किया गया",
+    cacheSize: "14.2 MB",
+    detecting: "खोज रहा है..."
   },
-  ta: {
-    settings: "அமைப்புகள்",
-    preferences: "விருப்பங்கள்",
-    language: "மொழி",
-    voiceSpeed: "குரல் வேகம்",
-    slow: "மெதுவான",
-    normal: "சாதாரண",
-    fast: "வேகமான",
-    dataPrivacy: "தரவு மற்றும் தனியுரிமை",
-    offlineMode: "ஆஃப்லைன் பயன்முறை",
-    offlineDesc: "துண்டிக்கப்பட்டபோது கேச் தரவைப் பயன்படுத்தவும்",
-    autoSave: "தானியங்கி சேமிப்பு",
-    autoSaveDesc: "அனைத்து பகுப்பாய்வு முடிவுகளையும் தானாகவே சேமிக்கவும்",
-    storage: "பயன்படுத்திய சேமிப்பகம்",
-    clearHistory: "அனைத்து வரலாற்றையும் அழி",
-    aboutSupport: "பற்றி மற்றும் ஆதரவு",
-    version: "பதிப்பு",
-    help: "உதவி மையம்",
-    terms: "விதிமுறைகள் மற்றும் தனியுரிமை கொள்கை",
-    rate: "பயன்பாட்டை மதிப்பிடவும்",
-  },
-  te: {
-    settings: "సెట్టింగ్‌లు",
-    preferences: "ప్రాధాన్యతలు",
-    language: "భాష",
-    voiceSpeed: "వాయిస్ వేగం",
-    slow: "నెమ్మదిగా",
-    normal: "సాధారణ",
-    fast: "వేగంగా",
-    dataPrivacy: "డేటా & గోప్యత",
-    offlineMode: "ఆఫ్‌లైన్ మోడ్",
-    offlineDesc: "డిస్‌కనెక్ట్ అయినప్పుడు కాష్ చేసిన డేటాను ఉపయోగించండి",
-    autoSave: "ఆటో-సేవ్",
-    autoSaveDesc: "అన్ని విశ్లేషణ ఫలితాలను స్వయంచాలకంగా సేవ్ చేయండి",
-    storage: "ఉపయోగించిన నిల్వ",
-    clearHistory: "మొత్తం చరిత్రను క్లియర్ చేయండి",
-    aboutSupport: "గురించి & మద్దతు",
-    version: "వెర్షన్",
-    help: "సహాయ కేంద్రం",
-    terms: "నిబంధనలు & గోప్యతా విధానం",
-    rate: "యాప్‌ను రేట్ చేయండి",
-  },
-  mr: {
-    settings: "सेटिंग्ज",
-    preferences: "प्राधान्ये",
-    language: "भाषा",
-    voiceSpeed: "आवाज वेग",
-    slow: "हळू",
-    normal: "सामान्य",
-    fast: "वेगवान",
-    dataPrivacy: "डेटा आणि गोपनीयता",
-    offlineMode: "ऑफलाइन मोड",
-    offlineDesc: "डिस्कनेक्ट असताना कॅश केलेला डेटा वापरा",
-    autoSave: "स्वयं-सेव्ह",
-    autoSaveDesc: "सर्व विश्लेषण परिणाम स्वयंचलितपणे सेव्ह करा",
-    storage: "वापरलेली स्टोरेज",
-    clearHistory: "सर्व इतिहास साफ करा",
-    aboutSupport: "बद्दल आणि समर्थन",
-    version: "आवृत्ती",
-    help: "मदत केंद्र",
-    terms: "अटी आणि गोपनीयता धोरण",
-    rate: "अॅप रेट करा",
-  },
+  ta: { settings: "அமைப்புகள்", common: "பொது", appearance: "தோற்றம்", storage: "சேமிப்பு", language: "மொழி", voiceSpeed: "குரல் வேகம்", darkMode: "டார்க் பயன்முறை", notifications: "அறிவிப்புகள்", location: "இருப்பிடம்", locationDesc: "வானிலைக்காக", dataSaver: "தரவு சேமிப்பு", dataSaverDesc: "தரவைச் சேமிக்கவும்", clearHistory: "வரலாற்றை அழி", clearCache: "கேச் அழி", clearConfirm: "நிச்சயமாகவா?", version: "பதிப்பு", slow: "மெதுவான", normal: "சாதாரண", fast: "வேகமான", cleared: "அழிக்கப்பட்டது", cacheSize: "14.2 MB", detecting: "கண்டறிதல்..." },
+  te: { settings: "సెట్టింగ్‌లు", common: "సాధారణ", appearance: "కனிபించు", storage: "నిల్వ", language: "భాష", voiceSpeed: "వాయిస్ వేగం", darkMode: "డార్క్ మోడ్", notifications: "నోటిnotificationలు", location: "స్థానం", locationDesc: "వాతావরণం కోసం", dataSaver: "డేటా సేవర్", dataSaverDesc: "డేటాను సేవ్ చేయండి", clearHistory: "చరిత్రను క్లిயர் చేయండి", clearCache: "కాష్ క్లియర్ చేయండి", clearConfirm: "ఖచ్చితంగా ఉన్నారా?", version: "వెర్షన్", slow: "నెమ్మదిగా", normal: "సాధారణ", fast: "వేగంగా", cleared: "క్లిயர் చేయబడింది", cacheSize: "14.2 MB", detecting: "గుర్తిస్తోంది..." },
+  mr: { settings: "सेटिंग्ज", common: "सामान्य", appearance: "दिसणे", storage: "स्टोरेज", language: "भाषा", voiceSpeed: "आवाज वेग", darkMode: "डार्क मोड", notifications: "सूचना", location: "स्थान", locationDesc: "हवामानासाठी", dataSaver: "डेटा सेव्हर", dataSaverDesc: "डेटा वाचवा", clearHistory: "इतिहास साफ करा", clearCache: "कॅशे साफ करा", clearConfirm: "खात्री आहे का?", version: "आवृत्ती", slow: "हळू", normal: "सामान्य", fast: "वेगवान", cleared: "साफ केले", cacheSize: "14.2 MB", detecting: "शोधत आहे..." },
 };
 
-// iOS-style Toggle Switch component
+// Perfect Pill Structure Toggle Switch
 function ToggleSwitch({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
-    <button
+    <div
       onClick={onToggle}
       className={cn(
-        "relative w-[51px] h-[31px] rounded-full transition-colors duration-200",
-        "focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95",
-        enabled ? "bg-primary" : "bg-muted-foreground/30"
+        "relative w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300",
+        enabled ? "bg-[#76b900]" : "bg-zinc-300 dark:bg-zinc-700"
       )}
-      role="switch"
-      aria-checked={enabled}
     >
       <div
         className={cn(
-          "absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow-sm transition-transform duration-200",
-          enabled ? "translate-x-[22px]" : "translate-x-[2px]"
+          "w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ease-out",
+          enabled ? "translate-x-7" : "translate-x-0"
         )}
       />
-    </button>
+    </div>
+  );
+}
+
+// Reusable Setting Row
+function SettingRow({
+  icon: Icon,
+  title,
+  subtitle,
+  value,
+  onClick,
+  action
+}: {
+  icon?: any;
+  title: string;
+  subtitle?: string;
+  value?: string;
+  onClick?: () => void;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-between p-4 min-h-[64px] transition-colors",
+        onClick ? "cursor-pointer active:bg-muted/50" : ""
+      )}
+    >
+      <div className="flex items-center gap-4 overflow-hidden">
+        {Icon && (
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Icon size={20} className="text-primary" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-body font-medium text-foreground truncate">{title}</p>
+          {subtitle && (
+            <p className="text-caption text-muted-foreground truncate">{subtitle}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 pl-2">
+        {value && (
+          <span className="text-subhead text-muted-foreground">{value}</span>
+        )}
+        {action}
+        {onClick && !action && (
+          <ChevronRight size={18} className="text-muted-foreground/50" />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -153,81 +153,152 @@ export function SettingsScreen({
   voiceSpeed,
   onVoiceSpeedChange,
 }: SettingsScreenProps) {
-  const t = translations[language as keyof typeof translations] || translations.en;
+  const t = (translations[language as keyof typeof translations] || translations.en) as any;
+  const { clearHistory } = useChat();
+
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem("theme") === "dark" ||
+      document.documentElement.classList.contains("dark");
+  });
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem("notifications") !== "false";
+  });
+
+  const [dataSaver, setDataSaver] = useState(() => {
+    return localStorage.getItem("dataSaver") === "true";
+  });
+
+  const [locationName, setLocationName] = useState("Delhi, India");
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    // Attempt to get nicer location name from cache if available?
+    // For now we just mock or use geolocation
+    navigator.geolocation?.getCurrentPosition((pos) => {
+      // In a real app we'd reverse geocode here
+      setLocationName(`${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}`);
+    });
+  }, []);
+
+  const handleToggleInternal = (
+    val: boolean,
+    setVal: (v: boolean) => void,
+    key: string,
+    message?: string
+  ) => {
+    const newVal = !val;
+    setVal(newVal);
+    localStorage.setItem(key, String(newVal));
+    if (newVal && message) toast.success(message);
+  };
+
+  const handleClearHistory = async () => {
+    if (window.confirm(t.clearConfirm)) {
+      await clearHistory();
+      toast.success(t.cleared);
+    }
+  };
+
+  const handleClearCache = () => {
+    if (window.confirm(t.clearConfirm)) {
+      localStorage.removeItem("weather_cache");
+      localStorage.removeItem("last_analysis");
+      toast.success(t.cleared);
+    }
+  };
+
+  const selectedLangName = languages.find(l => l.code === language)?.nativeName;
 
   return (
-    <div className="flex flex-col flex-1 bg-muted pb-28 animate-fade-in">
-      {/* Header */}
-      <div className="px-5 pt-6 pb-4 bg-background border-b border-border">
-        <h1 className="text-title-lg font-bold text-foreground">{t.settings}</h1>
+    <div className="flex flex-col flex-1 bg-muted/20 pb-28 animate-fade-in min-h-screen">
+      {/* Header with improved styling */}
+      <div className="px-6 pt-10 pb-6 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-20">
+        <h1 className="text-title-lg font-bold text-foreground tracking-tight">{t.settings}</h1>
       </div>
 
-      <div className="px-5 py-6 space-y-8 max-w-lg mx-auto">
-        {/* Preferences Section */}
+      <div className="px-5 py-6 space-y-8 max-w-lg mx-auto w-full">
+
+        {/* COMMON SETTINGS */}
         <section>
-          <h2 className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-3 px-1">
-            {t.preferences}
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 mb-3 px-2">
+            {t.common}
           </h2>
-          <div className="bg-card rounded-apple border border-border shadow-apple-sm overflow-hidden">
-            {/* Language */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Globe size={18} className="text-primary" />
-                </div>
-                <span className="text-body font-medium text-foreground">{t.language}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-subhead text-muted-foreground">
-                  {languages.find(l => l.code === language)?.nativeName}
-                </span>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </div>
+          <div className="bg-card rounded-apple-lg border border-border/60 shadow-apple-sm overflow-hidden">
+
+            {/* Language Selector */}
+            <div className="relative">
+              <SettingRow
+                icon={Globe}
+                title={t.language}
+                value={selectedLangName}
+              />
+              <select
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value)}
+              >
+                {languages.map(l => (
+                  <option key={l.code} value={l.code}>{l.flag} {l.nativeName}</option>
+                ))}
+              </select>
             </div>
 
-            {/* Language Selection */}
-            <div className="p-4 bg-muted/50 border-b border-border space-y-2">
-              {languages.map((lang) => (
-                <button
-                  key={lang.code}
-                  onClick={() => onLanguageChange(lang.code)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-apple transition-all active:scale-[0.98]",
-                    language === lang.code
-                      ? "bg-primary/10 border border-primary/30"
-                      : "bg-card border border-transparent hover:bg-muted"
-                  )}
-                >
-                  <span className="text-2xl">{lang.flag}</span>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium text-foreground">{lang.nativeName}</p>
-                    <p className="text-caption text-muted-foreground">{lang.name}</p>
-                  </div>
-                  {language === lang.code && (
-                    <Check size={20} className="text-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
+            <div className="w-full h-px bg-border/50" />
+
+            {/* Location */}
+            <SettingRow
+              icon={MapPin}
+              title={t.location}
+              subtitle={locationName}
+              action={<RefreshCw size={16} className="text-primary animate-pulse-glow" />}
+              onClick={() => {
+                setLocationName(t.detecting);
+                setTimeout(() => {
+                  navigator.geolocation?.getCurrentPosition(
+                    (p) => {
+                      setLocationName(`${p.coords.latitude.toFixed(1)}, ${p.coords.longitude.toFixed(1)}`);
+                      toast.success("Location updated");
+                    },
+                    (e) => {
+                      console.error(e);
+                      setLocationName("Permission denied");
+                      toast.error("Could not detect location");
+                    }
+                  );
+                }, 1000);
+              }}
+            />
+
+            <div className="w-full h-px bg-border/50" />
 
             {/* Voice Speed */}
             <div className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Volume2 size={18} className="text-primary" />
+              <div className="flex items-center gap-4 mb-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Volume2 size={20} className="text-primary" />
                 </div>
                 <span className="text-body font-medium text-foreground">{t.voiceSpeed}</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex bg-muted rounded-xl p-1">
                 {(["slow", "normal", "fast"] as const).map((speed) => (
                   <button
                     key={speed}
                     onClick={() => onVoiceSpeedChange(speed)}
                     className={cn(
-                      "flex-1 py-3 rounded-apple font-semibold transition-all active:scale-[0.98]",
+                      "flex-1 py-1.5 rounded-lg text-subhead font-medium transition-all duration-200",
                       voiceSpeed === speed
-                        ? "bg-primary text-primary-foreground shadow-green"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        ? "bg-white dark:bg-muted-foreground/20 text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {t[speed]}
@@ -235,110 +306,99 @@ export function SettingsScreen({
                 ))}
               </div>
             </div>
+
           </div>
         </section>
 
-        {/* Data & Privacy Section */}
+        {/* APPEARANCE */}
         <section>
-          <h2 className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-3 px-1">
-            {t.dataPrivacy}
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 mb-3 px-2">
+            {t.appearance}
           </h2>
-          <div className="bg-card rounded-apple border border-border shadow-apple-sm overflow-hidden">
-            {/* Offline Mode */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Cloud size={18} className="text-primary" />
-                </div>
-                <div>
-                  <p className="text-body font-medium text-foreground">{t.offlineMode}</p>
-                  <p className="text-caption text-muted-foreground">{t.offlineDesc}</p>
-                </div>
-              </div>
-              <ToggleSwitch enabled={false} onToggle={() => { }} />
-            </div>
+          <div className="bg-card rounded-apple-lg border border-border/60 shadow-apple-sm overflow-hidden">
 
-            {/* Auto-Save */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Zap size={18} className="text-primary" />
-                </div>
-                <div>
-                  <p className="text-body font-medium text-foreground">{t.autoSave}</p>
-                  <p className="text-caption text-muted-foreground">{t.autoSaveDesc}</p>
-                </div>
-              </div>
-              <ToggleSwitch enabled={true} onToggle={() => { }} />
-            </div>
+            <SettingRow
+              icon={isDarkMode ? Moon : Sun}
+              title={t.darkMode}
+              action={
+                <ToggleSwitch enabled={isDarkMode} onToggle={() => setIsDarkMode(!isDarkMode)} />
+              }
+            />
 
-            {/* Storage */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Database size={18} className="text-primary" />
-                </div>
-                <span className="text-body font-medium text-foreground">{t.storage}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-subhead font-semibold text-foreground">12.4 MB</span>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </div>
-            </div>
+            <div className="w-full h-px bg-border/50" />
 
-            {/* Clear History */}
-            <button className="w-full p-4 text-center text-body font-semibold text-destructive hover:bg-destructive/5 transition-colors active:scale-[0.98]">
-              {t.clearHistory}
-            </button>
+            <SettingRow
+              icon={Bell}
+              title={t.notifications}
+              action={
+                <ToggleSwitch
+                  enabled={notificationsEnabled}
+                  onToggle={() => handleToggleInternal(notificationsEnabled, setNotificationsEnabled, "notifications", "Notification settings saved")}
+                />
+              }
+            />
           </div>
         </section>
 
-        {/* About & Support Section */}
+        {/* STORAGE & DATA */}
         <section>
-          <h2 className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-3 px-1">
-            {t.aboutSupport}
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 mb-3 px-2">
+            {t.storage}
           </h2>
-          <div className="bg-card rounded-apple border border-border shadow-apple-sm overflow-hidden">
-            {/* Version */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <span className="text-body text-muted-foreground">{t.version}</span>
-              <span className="text-body font-semibold text-foreground">2.1.0</span>
+          <div className="bg-card rounded-apple-lg border border-border/60 shadow-apple-sm overflow-hidden">
+
+            <SettingRow
+              icon={Zap}
+              title={t.dataSaver}
+              subtitle={t.dataSaverDesc}
+              action={
+                <ToggleSwitch
+                  enabled={dataSaver}
+                  onToggle={() => handleToggleInternal(dataSaver, setDataSaver, "dataSaver", "Data Saver updated")}
+                />
+              }
+            />
+
+            <div className="w-full h-px bg-border/50" />
+
+            <SettingRow
+              icon={HardDrive}
+              title={t.clearCache}
+              subtitle={t.cacheSize}
+              onClick={handleClearCache}
+            />
+
+            <div className="w-full h-px bg-border/50" />
+
+            <div
+              onClick={handleClearHistory}
+              className="flex items-center justify-between p-4 cursor-pointer active:bg-destructive/10 transition-colors group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors">
+                  <Trash2 size={20} className="text-destructive" />
+                </div>
+                <div className="flex-col">
+                  <p className="text-body font-medium text-destructive">{t.clearHistory}</p>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-destructive/40" />
             </div>
 
-            {/* Help */}
-            <button className="w-full flex items-center justify-between p-4 border-b border-border hover:bg-muted/50 transition-colors active:scale-[0.98]">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <HelpCircle size={18} className="text-primary" />
-                </div>
-                <span className="text-body font-medium text-foreground">{t.help}</span>
-              </div>
-              <ChevronRight size={18} className="text-muted-foreground" />
-            </button>
-
-            {/* Terms */}
-            <button className="w-full flex items-center justify-between p-4 border-b border-border hover:bg-muted/50 transition-colors active:scale-[0.98]">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <FileText size={18} className="text-primary" />
-                </div>
-                <span className="text-body font-medium text-foreground">{t.terms}</span>
-              </div>
-              <ChevronRight size={18} className="text-muted-foreground" />
-            </button>
-
-            {/* Rate */}
-            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors active:scale-[0.98]">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Star size={18} className="text-primary" />
-                </div>
-                <span className="text-body font-medium text-primary">{t.rate}</span>
-              </div>
-              <ChevronRight size={18} className="text-muted-foreground" />
-            </button>
           </div>
         </section>
+
+        {/* Footer info */}
+        <div className="flex flex-col items-center justify-center py-8 gap-3 opacity-60">
+          <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-border/50 flex items-center justify-center mb-1">
+            <img src="/logo.svg" className="w-8 h-8 object-contain" alt="Logo" />
+          </div>
+          <div className="text-center">
+            <p className="text-caption font-semibold text-foreground">Agrotalk Assist</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t.version} 2.1.0 (Beta)</p>
+          </div>
+        </div>
+
       </div>
     </div>
   );
