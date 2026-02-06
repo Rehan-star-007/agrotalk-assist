@@ -15,6 +15,10 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
     const [searchQuery, setSearchQuery] = useState('');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    // Deep Search State
+    const [originalPrices, setOriginalPrices] = useState<MandiPriceRecord[]>([]);
+    const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+
     // AI Analysis State
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
     const [analyses, setAnalyses] = useState<Record<string, string>>({});
@@ -27,8 +31,9 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
             if (isRefresh) setIsRefreshing(true);
             else setLoading(true);
 
-            const data = await mandiService.fetchPrices(20);
+            const data = await mandiService.fetchPrices(200);
             setPrices(data.records);
+            setOriginalPrices(data.records);
             setError(null);
 
             // Automatically trigger analysis for the first 5 records to avoid overload
@@ -47,6 +52,52 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
     useEffect(() => {
         loadPrices();
     }, []);
+
+    // Deep Search Logic (Debounced)
+    useEffect(() => {
+        const timeoutId = setTimeout(async () => {
+            if (!searchQuery.trim()) {
+                if (prices.length !== originalPrices.length) {
+                    setPrices(originalPrices);
+                }
+                return;
+            }
+
+            // 1. First check if we have it locally in the original 200
+            const localMatches = originalPrices.filter(p =>
+                p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.market.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.district.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+
+            // 2. If locally found, just let the render-side filter handle it (so we reset to original source to filter from)
+            if (localMatches.length > 0) {
+                if (prices !== originalPrices) {
+                    setPrices(originalPrices);
+                }
+                return;
+            }
+
+            // 3. If NOT found locally, search the Database (API)
+            setIsSearchingOnline(true);
+            try {
+                const data = await mandiService.fetchPrices(50, 0, searchQuery);
+                if (data.records.length > 0) {
+                    setPrices(data.records);
+                } else {
+                    // Stay empty if nothing found, but at least we tried
+                    setPrices([]);
+                }
+            } catch (err) {
+                console.error("Deep search failed", err);
+            } finally {
+                setIsSearchingOnline(false);
+            }
+
+        }, 800); // 800ms debounce to avoid spamming API
+
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, originalPrices]);
 
     const getAIAnalysis = async (record: MandiPriceRecord) => {
         const id = `${record.market}-${record.commodity}-${record.modal_price}`;
@@ -68,6 +119,13 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
         } catch (err) {
             console.error("AI Analysis failed", err);
         }
+    };
+
+    const toggleAnalysis = (id: string) => {
+        setExpandedAnalyses(prev => ({
+            ...prev,
+            [id]: !prev[id]
+        }));
     };
 
     const filteredPrices = prices.filter(p =>
@@ -105,7 +163,11 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
 
                 {/* Search Bar */}
                 <div className="relative mb-6 group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" size={18} />
+                    {isSearchingOnline ? (
+                        <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 text-primary animate-spin" size={18} />
+                    ) : (
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" size={18} />
+                    )}
                     <input
                         type="text"
                         placeholder={t.searchPlaceholder}
@@ -137,7 +199,9 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
                 ) : filteredPrices.length === 0 ? (
                     <div className="p-12 text-center bg-muted/50 rounded-apple-lg border border-dashed border-border">
                         <ShoppingBag className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                        <p className="text-subhead text-muted-foreground font-medium">{t.noData}</p>
+                        <p className="text-subhead text-muted-foreground font-medium">
+                            {isSearchingOnline ? "Checking global database..." : t.noData}
+                        </p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -207,20 +271,35 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
 
                                         {/* AI Analysis Section (Dynamic Update) */}
                                         {analysis && (
-                                            <div className="mt-4 p-4 rounded-apple bg-primary/5 border border-primary/10 animate-slide-up">
-                                                <div className="flex items-center gap-2 mb-2 text-primary">
-                                                    <Brain size={16} />
-                                                    <span className="text-caption font-bold uppercase tracking-wider">{t.aiAdvice}</span>
-                                                </div>
-                                                <p className="text-body text-foreground leading-relaxed">
-                                                    {analysis}
-                                                </p>
-                                                <div className="mt-3 flex justify-end">
-                                                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/50 px-2 py-0.5 rounded-full border border-border/50">
-                                                        <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
-                                                        <span>AI-Powered Insights</span>
+                                            <div className="mt-4 rounded-apple bg-primary/5 border border-primary/10 overflow-hidden transition-all duration-300">
+                                                <button
+                                                    onClick={() => toggleAnalysis(id)}
+                                                    className="w-full flex items-center justify-between p-4 hover:bg-primary/5 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-2 text-primary">
+                                                        <img src="/logo.svg" alt="App Logo" className="w-5 h-5 object-contain" />
+                                                        <span className="text-caption font-bold uppercase tracking-wider">{t.aiAdvice}</span>
                                                     </div>
-                                                </div>
+                                                    {expandedAnalyses[id] ? (
+                                                        <ChevronUp size={16} className="text-primary/70" />
+                                                    ) : (
+                                                        <ChevronDown size={16} className="text-primary/70" />
+                                                    )}
+                                                </button>
+
+                                                {expandedAnalyses[id] && (
+                                                    <div className="px-4 pb-4 animate-in slide-in-from-top-2 fade-in duration-200">
+                                                        <p className="text-body text-foreground leading-relaxed">
+                                                            {analysis}
+                                                        </p>
+                                                        <div className="mt-3 flex justify-end">
+                                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/50 px-2 py-0.5 rounded-full border border-border/50">
+                                                                <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                                                                <span>AI-Powered Insights</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

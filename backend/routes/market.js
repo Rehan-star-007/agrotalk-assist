@@ -6,8 +6,8 @@ const { getMarketAnalysis } = require('../services/openRouterService');
 const analysisCache = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
-const API_KEY = process.env.VITE_MANDI_API_KEY || '579b464db66ec23bdd000001fe9d36968d1d4e8e62fee0cc92cefecd';
-const BASE_URL = 'https://api.data.gov.in/resource/9ef275ee-e289-487b-80a2-8c8d8dcb4545';
+const API_KEY = process.env.VITE_MANDI_API_KEY;
+const BASE_URL = process.env.VITE_MANDI_API_BASE_URL || 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070';
 
 /**
  * GET /market/prices
