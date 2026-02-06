@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp, X, Filter, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTranslation } from '@/lib/translations';
 import { mandiService, type MandiPriceRecord } from '@/services/mandiService';
@@ -25,6 +25,11 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
     const [analyses, setAnalyses] = useState<Record<string, string>>({});
     const [expandedAnalyses, setExpandedAnalyses] = useState<Record<string, boolean>>({});
 
+    // Filtering State
+    const [selectedState, setSelectedState] = useState<string>('all');
+    const [maxPrice, setMaxPrice] = useState<number>(0);
+    const [showFilters, setShowFilters] = useState(false);
+
     const t = getTranslation('market', language);
 
     const loadPrices = async (isRefresh = false) => {
@@ -32,13 +37,13 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
             if (isRefresh) setIsRefreshing(true);
             else setLoading(true);
 
-            const data = await mandiService.fetchPrices(20);
+            // Back to 200 limit for better initial variety
+            const data = await mandiService.fetchPrices(200);
             setPrices(data.records);
             setOriginalPrices(data.records);
             setError(null);
 
-            // Automatically trigger analysis for the first 5 records to avoid overload
-            // but still show dynamic AI insights
+            // Automatically trigger analysis for the first 5 records
             data.records.slice(0, 5).forEach(record => {
                 getAIAnalysis(record);
             });
@@ -64,14 +69,14 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                 return;
             }
 
-            // 1. First check if we have it locally in the original 20
+            // 1. First check if we have it locally in the original set
             const localMatches = originalPrices.filter(p =>
                 p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.market.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.district.toLowerCase().includes(searchQuery.toLowerCase())
             );
 
-            // 2. If locally found, just let the render-side filter handle it (so we reset to original source to filter from)
+            // 2. If locally found, just let the render-side filter handle it
             if (localMatches.length > 0) {
                 if (prices !== originalPrices) {
                     setPrices(originalPrices);
@@ -86,7 +91,6 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                 if (data.records.length > 0) {
                     setPrices(data.records);
                 } else {
-                    // Stay empty if nothing found, but at least we tried
                     setPrices([]);
                 }
             } catch (err) {
@@ -95,14 +99,13 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                 setIsSearchingOnline(false);
             }
 
-        }, 800); // 800ms debounce to avoid spamming API
+        }, 800);
 
         return () => clearTimeout(timeoutId);
     }, [searchQuery, originalPrices]);
 
     const getAIAnalysis = async (record: MandiPriceRecord) => {
         const id = `${record.market}-${record.commodity}-${record.modal_price}`;
-
         if (analyses[id]) return;
 
         try {
@@ -129,11 +132,24 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
         }));
     };
 
-    const filteredPrices = prices.filter(p =>
-        p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.market.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.district.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredPrices = prices.filter(p => {
+        const matchesSearch = p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.market.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.district.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesState = selectedState === 'all' || p.state === selectedState;
+
+        const price = parseInt(p.modal_price);
+        const matchesPrice = maxPrice === 0 || price <= maxPrice;
+
+        return matchesSearch && matchesState && matchesPrice;
+    });
+
+    // Extract unique states for filter from original dataset
+    const states = Array.from(new Set(originalPrices.map(p => p.state))).sort();
+
+    // Find max price for range
+    const absoluteMaxPrice = Math.max(...originalPrices.map(p => parseInt(p.modal_price) || 0), 0);
 
     return (
         <div className="flex flex-col flex-1 pb-32 animate-fade-in">
@@ -174,9 +190,121 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                         placeholder={t.searchPlaceholder}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-4 py-4 rounded-apple bg-card border border-border shadow-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                        className="w-full h-14 pl-12 pr-12 rounded-apple bg-card border border-border shadow-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body"
                     />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+                        >
+                            <X size={16} />
+                        </button>
+                    )}
                 </div>
+
+                {/* Filter Actions */}
+                <div className="flex items-center gap-3 mb-6">
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={cn(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border transition-all active:scale-95 font-bold text-xs uppercase tracking-wider",
+                            showFilters || selectedState !== 'all' || maxPrice !== 0
+                                ? "bg-primary text-white border-primary shadow-apple-sm"
+                                : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                        )}
+                    >
+                        <Filter size={16} />
+                        {t.filters}
+                        {(selectedState !== 'all' || maxPrice !== 0) && (
+                            <div className="w-2 h-2 rounded-full bg-white animate-pulse ml-1" />
+                        )}
+                    </button>
+
+                    {(selectedState !== 'all' || maxPrice !== 0 || searchQuery !== '') && (
+                        <button
+                            onClick={() => {
+                                setSelectedState('all');
+                                setMaxPrice(0);
+                                setSearchQuery('');
+                            }}
+                            className="p-3 rounded-xl bg-card border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-all active:scale-95 shadow-apple-sm"
+                        >
+                            <X size={20} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Expanded Filters UI */}
+                {showFilters && (
+                    <div className="mb-6 p-5 rounded-apple bg-card border border-border shadow-apple-sm animate-in slide-in-from-top-4 fade-in duration-300">
+                        <div className="space-y-6">
+                            {/* State Filter */}
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-muted-foreground mb-3 block tracking-widest">{t.state}</label>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={() => setSelectedState('all')}
+                                        className={cn(
+                                            "px-4 py-2 rounded-full text-xs font-bold transition-all active:scale-90",
+                                            selectedState === 'all'
+                                                ? "bg-primary text-white shadow-md ring-2 ring-primary/20"
+                                                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                                        )}
+                                    >
+                                        {t.allRegions}
+                                    </button>
+                                    {states.slice(0, 10).map(state => (
+                                        <button
+                                            key={state}
+                                            onClick={() => setSelectedState(state)}
+                                            className={cn(
+                                                "px-4 py-2 rounded-full text-xs font-bold transition-all active:scale-90",
+                                                selectedState === state
+                                                    ? "bg-primary text-white shadow-md ring-2 ring-primary/20"
+                                                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                                            )}
+                                        >
+                                            {state}
+                                        </button>
+                                    ))}
+                                    {states.length > 10 && (
+                                        <select
+                                            value={states.includes(selectedState) ? selectedState : 'all'}
+                                            onChange={(e) => setSelectedState(e.target.value)}
+                                            className="px-4 py-2 rounded-full text-xs font-bold bg-muted/50 text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border-none cursor-pointer"
+                                        >
+                                            <option value="all">More States...</option>
+                                            {states.slice(10).map(state => (
+                                                <option key={state} value={state}>{state}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Price Range Filter */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground block tracking-widest">{t.maxPriceRange}</label>
+                                    <span className="text-sm font-black text-primary bg-primary/10 px-3 py-1 rounded-full">₹{maxPrice === 0 ? absoluteMaxPrice : maxPrice}</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={absoluteMaxPrice}
+                                    step="100"
+                                    value={maxPrice === 0 ? absoluteMaxPrice : maxPrice}
+                                    onChange={(e) => setMaxPrice(parseInt(e.target.value))}
+                                    className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+                                />
+                                <div className="flex justify-between text-[10px] font-bold text-muted-foreground mt-2 px-1">
+                                    <span>₹0</span>
+                                    <span>₹{absoluteMaxPrice}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </header>
 
             {/* Main Content */}

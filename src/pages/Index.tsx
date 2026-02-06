@@ -468,8 +468,8 @@ export default function Index() {
       return (
         <div className="flex flex-col h-full bg-background pb-24">
           {/* Chat Header with mute and exit */}
-          <header className="relative z-50 flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
-            <button onClick={exitChat} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 border border-border/50 shadow-sm hover:bg-muted transition-all active:scale-95">
+          <header className="relative z-50 flex items-center justify-between px-5 py-4 bg-background/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
+            <button onClick={exitChat} className="w-10 h-10 flex items-center justify-center rounded-xl bg-background/80 border border-border/50 shadow-sm hover:bg-muted transition-all active:scale-95">
               <X size={18} className="text-muted-foreground" />
             </button>
 
@@ -488,7 +488,7 @@ export default function Index() {
                   "flex items-center gap-1.5 px-3 h-10 rounded-xl border shadow-sm transition-all active:scale-95",
                   showVoiceMenu
                     ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-white/80 border-border/50 hover:bg-muted hover:border-primary/30"
+                    : "bg-background/80 border-border/50 hover:bg-muted hover:border-primary/30"
                 )}
               >
                 <Volume2 size={14} className={showVoiceMenu ? "text-primary" : "text-primary"} />
@@ -499,7 +499,7 @@ export default function Index() {
               </button>
 
               {showVoiceMenu && (
-                <div className="absolute right-0 top-full mt-2 z-50 w-48 bg-white rounded-xl border border-border/50 shadow-xl py-1 animate-in fade-in zoom-in-95 duration-200">
+                <div className="absolute right-0 top-full mt-2 z-50 w-48 bg-card rounded-xl border border-border/50 shadow-xl py-1 animate-in fade-in zoom-in-95 duration-200">
                   <div className="px-3 py-2 border-b border-border/30 bg-muted/30">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
                       {language === 'hi' ? 'आवाज़ चुनें' : 'Select Voice'}
@@ -577,10 +577,10 @@ export default function Index() {
                               <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{msg.condition}</span>
                             </div>
                           )}
-                          <div className="relative bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 overflow-hidden">
+                          <div className="relative bg-card rounded-2xl rounded-tl-md shadow-sm border border-border/50 overflow-hidden">
                             <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/50 via-primary to-primary/50" />
                             <div className="px-5 py-4">
-                              <div className="prose prose-sm text-foreground max-w-none leading-relaxed">
+                              <div className="prose prose-sm dark:prose-invert text-foreground max-w-none leading-relaxed">
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                               </div>
                             </div>
@@ -595,7 +595,7 @@ export default function Index() {
                                   "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95",
                                   currentPlayingId === msg.id && isPlaying
                                     ? "bg-primary text-white shadow-md"
-                                    : "bg-white text-primary border border-primary/30 hover:bg-primary/10",
+                                    : "bg-card text-primary border border-primary/30 hover:bg-primary/10",
                                   isMuted && "opacity-50 cursor-not-allowed"
                                 )}
                               >
@@ -616,7 +616,7 @@ export default function Index() {
                     <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white flex items-center justify-center border border-border/50 shadow-sm overflow-hidden p-1 animate-pulse">
                       <img src="/logo.svg" alt="AgroTalk" className="w-full h-full object-cover" />
                     </div>
-                    <div className="bg-white rounded-2xl rounded-tl-md shadow-sm border border-border/50 px-5 py-4">
+                    <div className="bg-card rounded-2xl rounded-tl-md shadow-sm border border-border/50 px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex gap-1.5">
                           <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -633,7 +633,7 @@ export default function Index() {
           </ScrollArea>
 
           {/* Chat Input */}
-          <div className="border-t border-border/50 bg-white/80 backdrop-blur-xl p-3 pb-4">
+          <div className="border-t border-border/50 bg-background/80 backdrop-blur-xl p-3 pb-4">
             <div className="max-w-2xl mx-auto flex items-center gap-3">
               <button
                 onClick={handleMicClick}
@@ -655,7 +655,7 @@ export default function Index() {
                     placeholder={getPlaceholderText()}
                     className={cn(
                       "w-full h-14 pl-5 pr-14 rounded-full",
-                      "bg-white border-2 border-border",
+                      "bg-card border-2 border-border",
                       "text-body placeholder:text-muted-foreground/60",
                       "focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10",
                       "transition-all duration-200 shadow-apple-sm",
@@ -855,6 +855,45 @@ export default function Index() {
     toast.success(getTranslation('common', language).success || "Analysis added to chat context");
   };
 
+  const handleMarketShare = (record: any) => {
+    setIsChatMode(true);
+    setActiveTab("home");
+
+    const tMarket = getTranslation('market', language);
+
+    const contextText = `${tMarket.commodity}: ${record.commodity}\n${tMarket.market}: ${record.market}\n${tMarket.variety}: ${record.variety || 'N/A'}\n${tMarket.modalPrice}: ₹${record.modal_price}\n${tMarket.priceRange}: ₹${record.min_price} - ₹${record.max_price}\n${tMarket.updated}: ${record.arrival_date}`;
+
+    const introMsg = tMarket.shareIntro
+      .replace('{commodity}', record.commodity)
+      .replace('{market}', record.market);
+
+    const newMessages: ChatMessage[] = [
+      {
+        id: `context_${Date.now()}`,
+        role: 'assistant',
+        content: `**${tMarket.shareTitle}**\n\n${contextText}`,
+        timestamp: new Date()
+      },
+      {
+        id: `user_intro_${Date.now() + 1}`,
+        role: 'user',
+        content: introMsg,
+        timestamp: new Date()
+      }
+    ];
+
+    setChatMessages(prev => [...prev, ...newMessages]);
+
+    setConversationHistory(prev => [
+      ...prev,
+      { role: 'assistant' as const, content: `CONTEXT: User shared a market price report for ${record.commodity} at ${record.market}. Price is ${record.modal_price} per quintal. Details: ${contextText}` },
+      { role: 'user' as const, content: introMsg }
+    ].slice(-10));
+
+    // Automatically trigger AI response
+    processResponse(introMsg);
+  };
+
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       {!isOnline && <OfflineBanner language={language} />}
@@ -876,9 +915,13 @@ export default function Index() {
           <SettingsScreen language={language} onLanguageChange={setLanguage} voiceSpeed={voiceSpeed} onVoiceSpeedChange={setVoiceSpeed} />
         )}
         {activeTab === "market" && (
-          <MarketPriceScreen language={language} />
+          <MarketPriceScreen
+            language={language}
+            onShareChat={handleMarketShare}
+          />
         )}
       </main>
+
 
       {!isChatMode && <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />}
 

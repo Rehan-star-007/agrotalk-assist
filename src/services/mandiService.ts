@@ -103,23 +103,39 @@ export const mandiService = {
         }
 
         try {
+            // First try with exact filter for commodity as it's more precise
             let url = `${BASE_URL}?api-key=${API_KEY}&format=json&limit=${limit}&offset=${offset}`;
             if (commodity) {
+                // If it's a multi-word search, q might be better, but filters[commodity] is the standard for this API
                 url += `&filters[commodity]=${encodeURIComponent(commodity)}`;
             }
 
             console.log(`📡 Fetching Mandi Prices: ${url.replace(API_KEY, 'HIDDEN')}`);
 
-            const response = await fetch(url);
+            let response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`API responded with status: ${response.status}`);
             }
 
-            const data = await response.json();
+            let data = await response.json();
 
-            // If API returns no records, fall back to mock data so the UI isn't empty
-            if (!data.records || data.records.length === 0) {
-                console.warn("⚠️ Mandi API returned empty records. Using mock data as fallback.");
+            // If no results with exact filter, try a broader 'q' search (supported by some OGD datasets)
+            if (commodity && (!data.records || data.records.length === 0)) {
+                console.log(`🔍 No matches for filter. Trying broader search with q=${commodity}...`);
+                const qUrl = `${BASE_URL}?api-key=${API_KEY}&format=json&limit=${limit}&offset=${offset}&q=${encodeURIComponent(commodity)}`;
+                const qResponse = await fetch(qUrl);
+                if (qResponse.ok) {
+                    const qData = await qResponse.json();
+                    if (qData.records && qData.records.length > 0) {
+                        data = qData;
+                    }
+                }
+            }
+
+            // If we have records (even if empty after broad search), return them
+            // ONLY fallback to mock data if it's the INITIAL LOAD (no commodity) and it's empty
+            if (!commodity && (!data.records || data.records.length === 0)) {
+                console.warn("⚠️ Mandi API returned empty records on initial load. Using mock data.");
                 return {
                     records: MOCK_RECORDS,
                     total: MOCK_RECORDS.length,
@@ -128,17 +144,21 @@ export const mandiService = {
             }
 
             return {
-                records: data.records,
-                total: data.total,
-                count: data.count
+                records: data.records || [],
+                total: data.total || 0,
+                count: data.count || 0
             };
         } catch (error) {
             console.error("❌ Error fetching mandi prices:", error);
-            // Fallback to mock data on error
+            // On hard error, fallback to filtered mock records if commodity exists
+            const filteredMock = commodity
+                ? MOCK_RECORDS.filter(r => r.commodity.toLowerCase().includes(commodity.toLowerCase()))
+                : MOCK_RECORDS;
+
             return {
-                records: MOCK_RECORDS,
-                total: MOCK_RECORDS.length,
-                count: MOCK_RECORDS.length
+                records: filteredMock,
+                total: filteredMock.length,
+                count: filteredMock.length
             };
         }
     }

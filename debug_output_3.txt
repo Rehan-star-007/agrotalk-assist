@@ -1,0 +1,16 @@
+﻿Starting Debug Probe...
+
+[TESTING] Voice: 'Magpie-Multilingual.EN-US.Mia', Lang: 'EN-US'
+[FAILED] Error: Triton model failed during inference. Error message: in ensemble 'magpie_tts_ensemble-Magpie-Multilingual', Mapping failed. Check that all pronunciations are specified properly.
+
+[TESTING] Voice: 'Magpie-Multilingual.EN-US.Mia', Lang: 'en-US'
+[SUCCESS] Generated 34816 bytes
+
+[TESTING] Voice: 'English-US.Mia', Lang: 'en-US'
+[FAILED] Model is not available on server: Voice English-US for language en-US not found. Please specify the voice name in your SynthesizeSpeechRequest.
+
+[TESTING] Voice: 'Mia', Lang: 'en-US'
+[FAILED] Model is not available on server: Voice Mia for language en-US not found. Please specify the voice name in your SynthesizeSpeechRequest.
+
+[TESTING] Voice: 'Magpie-Multilingual.en-US.Mia', Lang: 'en-US'
+[FAILED] Model is not available on server: subvoice requested not found
