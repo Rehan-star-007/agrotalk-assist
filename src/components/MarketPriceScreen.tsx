@@ -6,9 +6,10 @@ import { mandiService, type MandiPriceRecord } from '@/services/mandiService';
 
 interface MarketPriceScreenProps {
     language: string;
+    onShareChat?: (record: MandiPriceRecord) => void;
 }
 
-export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }) => {
+export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, onShareChat }) => {
     const [prices, setPrices] = useState<MandiPriceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
             if (isRefresh) setIsRefreshing(true);
             else setLoading(true);
 
-            const data = await mandiService.fetchPrices(200);
+            const data = await mandiService.fetchPrices(20);
             setPrices(data.records);
             setOriginalPrices(data.records);
             setError(null);
@@ -63,7 +64,7 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
                 return;
             }
 
-            // 1. First check if we have it locally in the original 200
+            // 1. First check if we have it locally in the original 20
             const localMatches = originalPrices.filter(p =>
                 p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.market.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -264,9 +265,12 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language }
                                                     <p className="text-caption font-bold">{record.variety}</p>
                                                 </div>
                                             </div>
-                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                                                <ArrowRight size={16} />
-                                            </div>
+                                            <button
+                                                onClick={() => onShareChat?.(record)}
+                                                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white hover:bg-primary-dark transition-all active:scale-95 shadow-lg group-hover:scale-110"
+                                            >
+                                                <ArrowRight size={20} />
+                                            </button>
                                         </div>
 
                                         {/* AI Analysis Section (Dynamic Update) */}
