@@ -31,6 +31,20 @@ const internalTranslations = {
     yesterday: "Yesterday",
     days: "days",
     weather: "Today's Weather",
+    cropName: "Crop Name",
+    diseaseName: "Disease Name",
+    save: "Save",
+    cancel: "Cancel",
+    clear: "Clear Sky",
+    partly: "Partly Cloudy",
+    cloudy: "Cloudy",
+    fog: "Foggy",
+    rain: "Rainy",
+    snow: "Snowy",
+    storm: "Thunderstorm",
+    confirmDelete: "Are you sure you want to delete this?",
+    deleted: "Analysis deleted",
+    updated: "Updated successfully",
   },
   hi: {
     title: "विश्लेषण इतिहास",
@@ -40,6 +54,20 @@ const internalTranslations = {
     yesterday: "कल",
     days: "दिन",
     weather: "आज का मौसम",
+    cropName: "फसल का नाम",
+    diseaseName: "रोग का नाम",
+    save: "सहेजें",
+    cancel: "रद्द करें",
+    clear: "साफ आसमान",
+    partly: "आंशिक बादल",
+    cloudy: "बादल",
+    fog: "कोहरा",
+    rain: "बारिश",
+    snow: "बर्फबारी",
+    storm: "तूफान",
+    confirmDelete: "क्या आप वाकई इसे हटाना चाहते हैं?",
+    deleted: "हटाया गया",
+    updated: "अपडेट किया गया",
   },
   ta: {
     title: "பகுப்பாய்வு வரலாறு",
@@ -49,6 +77,20 @@ const internalTranslations = {
     yesterday: "நேற்று",
     days: "நாட்கள்",
     weather: "இன்றைய வானிலை",
+    cropName: "பயிர் பெயர்",
+    diseaseName: "நோய் பெயர்",
+    save: "சேமி",
+    cancel: "ரத்துசெய்",
+    clear: "தெளிவான வானம்",
+    partly: "ஓரளவு மேகமூட்டம்",
+    cloudy: "மேகமூட்டம்",
+    fog: "மூடுபனி",
+    rain: "மழை",
+    snow: "பனிப்பொழிவு",
+    storm: "இடியுடன் மழை",
+    confirmDelete: "இதை நீக்க விரும்புகிறீர்களா?",
+    deleted: "பகுப்பாய்வு நீக்கப்பட்டது",
+    updated: "புதுப்பிக்கப்பட்டது",
   },
   te: {
     title: "విశ్లేషణ చరిత్ర",
@@ -58,6 +100,20 @@ const internalTranslations = {
     yesterday: "నిన్న",
     days: "రోజులు",
     weather: "ఈ రోజు వాతావరణం",
+    cropName: "పంట పేరు",
+    diseaseName: "వ్యాధి పేరు",
+    save: "సేవ్",
+    cancel: "రద్దు",
+    clear: "నిర్మలమైన ఆకాశం",
+    partly: "పాక్షికంగా మేఘావృతం",
+    cloudy: "మేఘావృతం",
+    fog: "పొగమంచు",
+    rain: "వర్షం",
+    snow: "మంచు",
+    storm: "ఉరుములతో వర్షం",
+    confirmDelete: "మీరు దీన్ని ఖచ్చితంగా తొలగించాలనుకుంటున్నారా?",
+    deleted: "విశ్లేషణ తొలగించబడింది",
+    updated: "నవీకరించబడింది",
   },
   mr: {
     title: "विश्लेषण इतिहास",
@@ -67,20 +123,35 @@ const internalTranslations = {
     yesterday: "काल",
     days: "दिवस",
     weather: "आजचे हवामान",
+    cropName: "पिकाचे नाव",
+    diseaseName: "रोगाचे नाव",
+    save: "जतन करा",
+    cancel: "रद्द करा",
+    clear: "निरभ्र आकाश",
+    partly: "अंशतः ढगाळ",
+    cloudy: "ढगाळ",
+    fog: "धुके",
+    rain: "पाऊस",
+    snow: "बर्फवृष्टी",
+    storm: "वादळ",
+    confirmDelete: "तुम्हाला हे नक्की डिलीट करायचे आहे का?",
+    deleted: "विश्लेषण हटवले",
+    updated: "अपडेट केले",
   },
 };
 
 type FilterType = "all" | "healthy" | "diseased" | "thisWeek";
 
-const getWeatherLabel = (code: number, isHindi: boolean): string => {
-  if (code === 0 || code === 1) return isHindi ? "साफ आसमान" : "Clear Sky";
-  if (code === 2) return isHindi ? "आंशिक बादल" : "Partly Cloudy";
-  if (code === 3) return isHindi ? "बादल" : "Cloudy";
-  if (code >= 45 && code <= 48) return isHindi ? "कोहरा" : "Foggy";
-  if (code >= 51 && code <= 67) return isHindi ? "बारिश" : "Rainy";
-  if (code >= 71 && code <= 86) return isHindi ? "बर्फबारी" : "Snowy";
-  if (code >= 95 && code <= 99) return isHindi ? "तूफान" : "Thunderstorm";
-  return isHindi ? "मौसम" : "Weather";
+const getWeatherLabel = (code: number, lang: string): string => {
+  const t = internalTranslations[lang as keyof typeof internalTranslations] || internalTranslations.en;
+  if (code === 0 || code === 1) return t.clear;
+  if (code === 2) return t.partly;
+  if (code === 3) return t.cloudy;
+  if (code >= 45 && code <= 48) return t.fog;
+  if (code >= 51 && code <= 67) return t.rain;
+  if (code >= 71 && code <= 86) return t.snow;
+  if (code >= 95 && code <= 99) return t.storm;
+  return t.weather;
 };
 
 const WeatherIcon: React.FC<{ code: number; isNight?: boolean }> = ({ code, isNight = false }) => {
@@ -107,7 +178,49 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
   const tLib = getTranslation('library', language);
   const tCommon = getTranslation('common', language);
   const internalT = internalTranslations[language as keyof typeof internalTranslations] || internalTranslations.en;
-  const isHindi = language === "hi";
+
+  // Common terms for fallback translation
+  const COMMON_TERMS: Record<string, Record<string, string>> = {
+    'Rice': { ta: 'அரிசி', te: 'వరి', mr: 'तांदूळ', hi: 'चावल' },
+    'Maize': { ta: 'மக்காச்சோளம்', te: 'మొక్కజొన్న', mr: 'मका', hi: 'मक्का' },
+    'Corn': { ta: 'மக்காச்சோளம்', te: 'మొక్కజొన్న', mr: 'மका', hi: 'மक्का' },
+    'Wheat': { ta: 'கோதுமை', te: 'గోధుమ', mr: 'गहू', hi: 'गेहूं' },
+    'Tomato': { ta: 'தக்காளி', te: 'టమోటా', mr: 'टोमॅटो', hi: 'टमाटर' },
+    'Potato': { ta: 'உருளைக்கிழங்கு', te: 'బంగాళాదుంప', mr: 'बटाटा', hi: 'आलू' },
+    'Onion': { ta: 'வெங்காயம்', te: 'ఉల్లిపాయ', mr: 'कांदा', hi: 'प्याज' },
+    'Healthy': { ta: 'ஆரோக்கியமானது', te: 'ఆరోగ్యకరమైనది', mr: 'निरोगी', hi: 'स्वस्थ' },
+    'None': { ta: 'ஏதுமில்லை', te: 'ఏమీ లేదు', mr: 'काहीही नाही', hi: 'कोई नहीं' },
+    'Issue': { ta: 'பிரச்சனை', te: 'సమస్య', mr: 'समस्या', hi: 'समस्या' },
+    'Confident': { ta: 'நம்பிக்கை', te: 'నమ్మకం', mr: 'आत्मविश्वास', hi: 'विश्वास' },
+  };
+
+  // Helper to get localized content based on selected language with smart fallback
+  const getLocalizedField = (item: LibraryItem, field: 'diseaseName' | 'cropType' | 'summary' | 'description') => {
+    // 1. Try specific language field
+    const langSuffix = { hi: 'Hi', ta: 'Ta', te: 'Te', mr: 'Mr' }[language] || '';
+    const localizedKey = `${field}${langSuffix}` as keyof LibraryItem;
+    const localizedValue = item[localizedKey] as string;
+    if (localizedValue) return localizedValue;
+
+    // 2. Try translating common English terms (e.g. "Rice" -> "அரிசி")
+    const enValue = item[field] as string;
+    if (enValue && COMMON_TERMS[enValue] && COMMON_TERMS[enValue][language]) {
+      return COMMON_TERMS[enValue][language];
+    }
+
+    // 3. Fallback to English (Better than Hindi for non-Hindi users)
+    return enValue || '';
+  };
+
+  // Helper for array fields (symptoms, treatment)
+  const getLocalizedArray = (item: LibraryItem, field: 'symptoms' | 'treatment') => {
+    const langSuffix = { hi: 'Hi', ta: 'Ta', te: 'Te', mr: 'Mr' }[language] || '';
+    const localizedKey = `${field}${langSuffix}` as keyof LibraryItem;
+    // Fallback to English only
+    return (item[localizedKey] as string[] | undefined) || (item[field] as string[] | undefined);
+  };
+
+
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -120,23 +233,33 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
     return `${days} ${internalT.days} ${internalT.ago}`;
   };
 
-  const filteredItems = items.filter(item => {
-    const matchesSearch =
-      item.diseaseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.cropType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.diseaseNameHi.includes(searchQuery) ||
-      item.cropTypeHi.includes(searchQuery);
+  const getFilteredItems = () => {
+    return items.filter((item) => {
+      // Filter logic: Check if localized content matches query
+      const name = getLocalizedField(item, 'diseaseName').toLowerCase();
+      const crop = getLocalizedField(item, 'cropType').toLowerCase();
+      const query = searchQuery.toLowerCase();
 
-    if (!matchesSearch) return false;
+      const matchSearch = name.includes(query) || crop.includes(query);
 
-    if (activeFilter === "healthy") return item.severity === "low";
-    if (activeFilter === "diseased") return item.severity !== "low";
-    if (activeFilter === "thisWeek") {
-      const diff = Date.now() - new Date(item.timestamp).getTime();
-      return diff < 86400000 * 7;
-    }
-    return true;
-  });
+      if (activeFilter === "all") return matchSearch;
+      if (activeFilter === "healthy") {
+        return matchSearch && (name.includes('healthy') || name.includes('स्वस्थ') || name.includes('निरोगी') || item.severity === 'low');
+      }
+      if (activeFilter === "diseased") {
+        return matchSearch && !(name.includes('healthy') || name.includes('स्वस्थ') || name.includes('निरोगी') || item.severity === 'low');
+      }
+      if (activeFilter === "thisWeek") {
+        const itemDate = new Date(item.timestamp);
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        return matchSearch && itemDate > oneWeekAgo;
+      }
+      return matchSearch;
+    });
+  };
+
+  const filteredItems = getFilteredItems();
 
   const stats = {
     total: items.length,
@@ -146,28 +269,29 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (confirm(isHindi ? "क्या आप वाकई इसे हटाना चाहते हैं?" : "Are you sure you want to delete this?")) {
+    if (confirm(internalT.confirmDelete)) {
       deleteItem(id);
-      toast.success(isHindi ? "हटाया गया" : "Analysis deleted");
+      toast.success(internalT.deleted);
     }
   };
 
   const startEdit = (item: LibraryItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setEditingId(item.id);
-    setEditDisease(isHindi ? item.diseaseNameHi : item.diseaseName);
-    setEditCrop(isHindi ? item.cropTypeHi : item.cropType);
+    setEditDisease(getLocalizedField(item, 'diseaseName'));
+    setEditCrop(getLocalizedField(item, 'cropType'));
   };
 
   const saveEdit = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (isHindi) {
-      updateItem(id, { diseaseNameHi: editDisease, cropTypeHi: editCrop });
+    const langSuffix = { hi: 'Hi', ta: 'Ta', te: 'Te', mr: 'Mr' }[language];
+    if (langSuffix) {
+      updateItem(id, { [`diseaseName${langSuffix}`]: editDisease, [`cropType${langSuffix}`]: editCrop });
     } else {
       updateItem(id, { diseaseName: editDisease, cropType: editCrop });
     }
     setEditingId(null);
-    toast.success(isHindi ? "अपडेट किया गया" : "Updated successfully");
+    toast.success(internalT.updated);
   };
 
   const filters: { id: FilterType; label: string }[] = [
@@ -183,7 +307,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
   const temperature = weatherData?.current?.temperature_2m ?? null;
   const humidity = weatherData?.current?.relative_humidity_2m ?? null;
   const weatherCode = weatherData?.current?.weather_code ?? 2;
-  const weatherLabel = getWeatherLabel(weatherCode, isHindi);
+  const weatherLabel = getWeatherLabel(weatherCode, language);
 
   // Day/Night logic matching Index.tsx / WeatherDashboard.tsx
   const currentHour = new Date().getHours();
@@ -212,8 +336,12 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                 <p className="text-display font-bold mt-1 animate-pulse">{tCommon.loading}</p>
               ) : temperature !== null ? (
                 <>
-                  <p className="text-display font-bold mt-1">{Math.round(temperature)}°C</p>
-                  <p className="text-subhead opacity-80 mt-1">{weatherLabel}</p>
+                  <p className="text-3xl font-black text-foreground drop-shadow-sm mb-1 animate-in zoom-in spin-in-3 duration-700">
+                    {Math.round(temperature)}°C
+                  </p>
+                  <p className="text-caption font-bold text-muted-foreground uppercase tracking-widest">
+                    {getWeatherLabel(weatherCode, language)}
+                  </p>
                 </>
               ) : (
                 <p className="text-display font-bold mt-1">--°C</p>
@@ -325,7 +453,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                   <div className="relative aspect-[4/3] overflow-hidden">
                     <img
                       src={analysis.thumbnail}
-                      alt={isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
+                      alt={getLocalizedField(analysis, 'diseaseName')}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
                     {/* Status Badge */}
@@ -334,7 +462,10 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                       "glass",
                       analysis.diseaseName.toLowerCase().includes('healthy') ? "text-primary" : "text-destructive"
                     )}>
-                      {analysis.diseaseName.toLowerCase().includes('healthy') ? (isHindi ? "स्वस्थ" : "Healthy") : (isHindi ? "समस्या" : "Issue")}
+                      {analysis.diseaseName.toLowerCase().includes('healthy')
+                        ? (COMMON_TERMS['Healthy'][language] || "Healthy")
+                        : (COMMON_TERMS['Issue'][language] || "Issue")
+                      }
                     </div>
                   </div>
 
@@ -347,7 +478,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                           analysis.diseaseName.toLowerCase() === 'healthy' ? "bg-primary" : "bg-destructive animate-pulse"
                         )} />
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                          {isHindi ? analysis.cropTypeHi : analysis.cropType} • {formatTime(analysis.timestamp)}
+                          {getLocalizedField(analysis, 'cropType')} • {formatTime(analysis.timestamp)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -373,7 +504,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                             value={editCrop}
                             onChange={(e) => setEditCrop(e.target.value)}
                             className="w-full px-2 py-1.5 border rounded-md text-caption bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            placeholder={isHindi ? "फसल का नाम" : "Crop Name"}
+                            placeholder={internalT.cropName}
                           />
                         </div>
                         <div className="space-y-1">
@@ -383,27 +514,27 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                             className="w-full px-2 py-1.5 border rounded-md text-headline bg-background font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
                             autoFocus
                             onKeyDown={(e) => e.key === 'Enter' && saveEdit(analysis.id)}
-                            placeholder={isHindi ? "रोग का नाम" : "Disease Name"}
+                            placeholder={internalT.diseaseName}
                           />
                         </div>
                         <div className="flex gap-1.5 mt-1">
                           <Button size="sm" className="flex-1 h-8 text-[10px] font-bold" onClick={(e) => saveEdit(analysis.id, e)}>
-                            {isHindi ? "सहेजें" : "Save"}
+                            {internalT.save}
                           </Button>
                           <Button size="sm" variant="ghost" className="flex-1 h-8 text-[10px]" onClick={(e) => { e.stopPropagation(); setEditingId(null); }}>
-                            {isHindi ? "रद्द करें" : "Cancel"}
+                            {internalT.cancel}
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <h3 className="text-headline font-bold text-foreground line-clamp-1">
-                        {isHindi ? analysis.diseaseNameHi : analysis.diseaseName}
+                        {getLocalizedField(analysis, 'diseaseName')}
                       </h3>
                     )}
 
                     {/* Confidence */}
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-subhead font-semibold text-primary">{analysis.confidence}% Confident</span>
+                      <span className="text-subhead font-semibold text-primary">{analysis.confidence}% {COMMON_TERMS['Confident'][language] || "Confident"}</span>
                       <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-all duration-1000"
@@ -415,7 +546,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                     <div className="h-px bg-border my-3" />
 
                     <p className="text-subhead text-muted-foreground line-clamp-2">
-                      {isHindi ? analysis.summaryHi : analysis.summary}
+                      {getLocalizedField(analysis, 'summary')}
                     </p>
 
                     {/* Footer */}
@@ -446,7 +577,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
             </Button>
             <div className="text-center">
               <h2 className="text-headline font-bold text-foreground">{tLib.analysisDetails}</h2>
-              <p className="text-caption text-muted-foreground">{isHindi ? selectedItem.cropTypeHi : selectedItem.cropType}</p>
+              <p className="text-caption text-muted-foreground">{getLocalizedField(selectedItem, 'cropType')}</p>
             </div>
             <div className="w-10" /> {/* Spacer */}
           </div>
@@ -466,7 +597,7 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
               {selectedItem.severity === "low" ? <CheckCircle className="text-primary" /> : <AlertCircle className="text-destructive" />}
               <div>
                 <p className={cn("text-headline font-bold", selectedItem.severity === "low" ? "text-primary" : "text-destructive")}>
-                  {isHindi ? selectedItem.diseaseNameHi : selectedItem.diseaseName}
+                  {getLocalizedField(selectedItem, 'diseaseName')}
                 </p>
                 <p className="text-caption text-muted-foreground uppercase tracking-widest">{selectedItem.severity === "low" ? tLib.healthy : tLib.issue} {tLib.severity}</p>
               </div>
@@ -476,15 +607,15 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.description}</p>
                 <p className="bg-muted/30 p-4 rounded-apple-lg border border-border">
-                  {isHindi ? selectedItem.descriptionHi || selectedItem.summaryHi : selectedItem.description || selectedItem.summary}
+                  {getLocalizedField(selectedItem, 'description') || getLocalizedField(selectedItem, 'summary')}
                 </p>
               </div>
 
-              {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms) && (isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.length > 0 && (
+              {getLocalizedArray(selectedItem, 'symptoms') && getLocalizedArray(selectedItem, 'symptoms')!.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.shareSymptoms}</p>
                   <div className="space-y-2">
-                    {(isHindi ? selectedItem.symptomsHi : selectedItem.symptoms)!.map((s, i) => (
+                    {getLocalizedArray(selectedItem, 'symptoms')!.map((s, i) => (
                       <div key={i} className="flex gap-3 items-start bg-card p-3 rounded-apple border border-border">
                         <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0 mt-0.5">{i + 1}</span>
                         <p className="text-subhead">{s}</p>
@@ -494,11 +625,11 @@ export function LibraryScreen({ language, weatherData, isWeatherLoading, onShare
                 </div>
               )}
 
-              {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment) && (isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.length > 0 && (
+              {getLocalizedArray(selectedItem, 'treatment') && getLocalizedArray(selectedItem, 'treatment')!.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">{tLib.treatmentPlan}</p>
                   <div className="bg-slate-900 p-5 rounded-apple-xl space-y-4">
-                    {(isHindi ? selectedItem.treatmentHi : selectedItem.treatment)!.map((t, i) => (
+                    {getLocalizedArray(selectedItem, 'treatment')!.map((t, i) => (
                       <div key={i} className="flex gap-3">
                         <span className="text-primary font-black mt-1">✓</span>
                         <p className="text-slate-200 text-subhead">{t}</p>

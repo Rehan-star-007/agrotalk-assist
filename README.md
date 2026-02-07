@@ -1,73 +1,115 @@
-# Welcome to your Lovable project
+# 🌾 AgroTalk Assist
 
-## Project info
+> **Voice-first AI assistant helping farmers with agricultural advice in their local language**
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+![License](https://img.shields.io/badge/license-MIT-green)
+![PWA](https://img.shields.io/badge/PWA-Ready-blue)
+![Offline](https://img.shields.io/badge/Offline-First-orange)
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+- **🎤 Voice-First Interaction**: Ask questions in Hindi, Tamil, Telugu, Marathi, or English
+- **📸 Crop Disease Detection**: AI-powered image analysis to identify plant diseases
+- **📊 Market Prices**: Real-time mandi prices from Data.gov.in API
+- **🌤️ Weather Integration**: Location-based weather updates and farming advice
+- **📚 Library**: Save and review past diagnoses and analyses
+- **🌐 Multi-language Support**: Full UI localization in 5 Indian languages
+- **📱 PWA/Installable**: Works as a native app on Android, iOS, and Desktop
 
-**Use Lovable**
+## 🌍 Offline-First Architecture
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+AgroTalk Assist is designed for low-connectivity rural environments:
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📱 Progressive Web App (PWA)
+- **Installable**: Functions as a native app
+- **Asset Caching**: Loads instantly even without internet
 
-**Use your preferred IDE**
+### 🗄️ Local Database (IndexedDB)
+- **Market Prices**: Cached mandi prices for offline viewing
+- **Chat History**: All conversations stored locally
+- **Library**: Crop analysis reports persisted locally
+- **Weather**: Last known weather report cached
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 🧠 Local Wisdom (Offline AI)
+When offline, the AI switches to a **Local Knowledge Base** with 100+ crop-specific Q&A entries covering common diseases, treatments, and farming advice.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🛠️ Tech Stack
 
-Follow these steps:
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS, shadcn/ui |
+| State | TanStack Query, React Hooks |
+| Backend | Node.js (Express), Python (FastAPI) |
+| AI/ML | NVIDIA NIM APIs, OpenRouter |
+| TTS | NVIDIA Riva, Edge TTS |
+| Database | IndexedDB (idb) |
+| PWA | vite-plugin-pwa, Workbox |
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 📦 Installation
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+```bash
+# Clone the repository
+git clone https://github.com/Rehan-star-007/agrotalk-assist.git
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Navigate to project directory
+cd agrotalk-assist
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Install dependencies
+npm install
+
+# Start the development server
 npm run dev
+
+# Start the backend (in another terminal)
+npm run dev:backend
 ```
 
-**Edit a file directly in GitHub**
+## 🔧 Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file:
+```env
+VITE_MANDI_API_KEY=your_api_key_here
+VITE_API_URL=http://localhost:3001
+```
 
-**Use GitHub Codespaces**
+## 📁 Project Structure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+agrotalk-assist/
+├── src/
+│   ├── components/     # React components
+│   ├── pages/          # Page components
+│   ├── lib/            # Utilities and API client
+│   ├── services/       # IndexedDB and sync services
+│   ├── data/           # Offline knowledge base
+│   └── hooks/          # Custom React hooks
+├── backend/            # Node.js backend
+├── backend_py/         # Python FastAPI backend
+├── public/             # Static assets
+└── docs/               # Documentation
+```
 
-## What technologies are used for this project?
+## 🧪 Testing
 
-This project is built with:
+```bash
+# Run unit tests
+npm run test
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Run with watch mode
+npm run test:watch
 
-## How can I deploy this project?
+# Type checking
+npx tsc --noEmit
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+# Linting
+npm run lint
+```
 
-## Can I connect a custom domain to my Lovable project?
+## 👥 Team
 
-Yes, you can!
+Built with ❤️ for Indian farmers
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📄 License
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT License - feel free to use this project for educational purposes.

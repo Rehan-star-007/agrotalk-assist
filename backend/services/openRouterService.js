@@ -94,6 +94,10 @@ async function getAgriAdvice(userQuery, weatherContext, imageBuffer = null, mime
 
         console.log(`🤖 Sending ${targetLang} request (max 180 tokens)...`);
 
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
         const response = await fetch(OPENROUTER_URL, {
             method: 'POST',
             headers: {
@@ -107,8 +111,11 @@ async function getAgriAdvice(userQuery, weatherContext, imageBuffer = null, mime
                 messages: messages,
                 temperature: 0.8,
                 max_tokens: 180
-            })
+            }),
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errText = await response.text();
@@ -237,6 +244,10 @@ async function getMarketAnalysis(mandiData, language = 'en') {
 
         console.log(`📊 Analyzing market data for ${commodity} in ${targetLang}...`);
 
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
         const response = await fetch(OPENROUTER_URL, {
             method: 'POST',
             headers: {
@@ -253,8 +264,11 @@ async function getMarketAnalysis(mandiData, language = 'en') {
                 ],
                 temperature: 0.3,
                 max_tokens: 300
-            })
+            }),
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errText = await response.text();

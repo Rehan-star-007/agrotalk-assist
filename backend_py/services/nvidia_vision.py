@@ -1,7 +1,7 @@
 import os
 import base64
 from typing import Optional, Dict, Any
-from openai import OpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,7 +13,7 @@ class NvidiaVisionService:
         self.client = None
         
         if self.api_key:
-            self.client = OpenAI(
+            self.client = AsyncOpenAI(
                 base_url=self.base_url,
                 api_key=self.api_key
             )
@@ -21,7 +21,7 @@ class NvidiaVisionService:
         else:
             print("🟡 NVIDIA_VISION_KEY not found in environment. NVIDIA mode will be disabled.")
 
-    def analyze_image(self, base64_image_data: str, language: str = "en") -> Dict[str, Any]:
+    async def analyze_image(self, base64_image_data: str, language: str = "en") -> Dict[str, Any]:
         """
         Analyzes an image using Meta Llama 3.2 90B Vision on NVIDIA NIM.
         """
@@ -48,40 +48,36 @@ class NvidiaVisionService:
             }
             target_lang_name = lang_names.get(language, "English")
             
-            # If language is English, we don't need double keys
-            is_english = (language == "en")
-            suffix = f"_{language}" if not is_english else ""
-
-            lang_instr = ""
-            json_keys = "disease_name, confidence, severity, description, symptoms, treatment_steps, organic_options, prevention_tips, crop_identified"
-            
-            if not is_english:
-                lang_instr = f"\n3. IMPORTANT: Provide content in BOTH English AND {target_lang_name}. Use the suffix '{suffix}' for {target_lang_name} keys.\n4. STRICT RULE: DO NOT provide translations in any other languages (No Spanish, French, German, Japanese, etc.)."
-                json_keys += f", disease_name{suffix}, description{suffix}, symptoms{suffix}, treatment_steps{suffix}, organic_options{suffix}, prevention_tips{suffix}"
-            else:
-                lang_instr = "\n3. STRICT RULE: Provide response ONLY in English. DO NOT provide any other languages (No Spanish, French, German, Japanese, Hindi, etc.)."
-
-            system_prompt = (
-                f"You are an expert plant pathologist. Analyze the image and provide a highly detailed diagnosis.\n\n"
-                f"RULES:\n"
-                f"1. If the plant is HEALTHY: Simply state 'Healthy' and give a positive description.\n"
-                f"2. If the plant has an ISSUE: Provide a detailed breakdown using these EXACT markers in your text:\n"
-                f"   - **Crop Identified**: [Exact Name of plant/fruit, e.g. Tomato, Maize]\n"
-                f"   - **Disease Name**: [Name of issue]\n"
-                f"   - **How it was formed**: [Detailed explanation of causes]\n"
-                f"   - **Symptoms**: [List bullet points of visual signs]\n"
-                f"   - **How we can prevent**: [List bullet points of proactive steps]\n"
-                f"   - **How we can recover**: [List bullet points of recovery steps]{lang_instr}\n\n"
-                f"Rules for Language:\n"
-                f"- Output ONLY in English and {target_lang_name}.\n"
-                f"- NEVER include Spanish, French, or any other language.\n"
-                f"- If asked for {target_lang_name}, provide it ONLY in the specific keys requested.\n\n"
-                f"CRITICAL: Always start your response with the 'Crop Identified' marker.\n"
-                f"If possible, wrap your entire response in a JSON object with these keys: {json_keys}.\n"
-                f"If you can't provide JSON, just use the bold markers above."
+            # Always generate ALL 5 languages for storage
+            all_lang_keys = (
+                "disease_name, disease_name_hindi, disease_name_tamil, disease_name_telugu, disease_name_marathi, "
+                "confidence, severity, "
+                "description, description_hindi, description_tamil, description_telugu, description_marathi, "
+                "symptoms, symptoms_hindi, symptoms_tamil, symptoms_telugu, symptoms_marathi, "
+                "treatment_steps, treatment_steps_hindi, treatment_steps_tamil, treatment_steps_telugu, treatment_steps_marathi, "
+                "organic_options, organic_options_hindi, organic_options_tamil, organic_options_telugu, organic_options_marathi, "
+                "prevention_tips, prevention_tips_hindi, prevention_tips_tamil, prevention_tips_telugu, prevention_tips_marathi, "
+                "crop_identified, crop_identified_hindi, crop_identified_tamil, crop_identified_telugu, crop_identified_marathi"
             )
 
-            response = self.client.chat.completions.create(
+            system_prompt = (
+                f"You are an expert plant pathologist. Analyze the image and provide a detailed diagnosis in {target_lang_name}.\\n\\n"
+                f"Return a JSON object ONLY with this structure:\\n"
+                f"{{\\n"
+                f'  "crop_identified": "name of plant/crop",\\n'
+                f'  "disease_name": "disease name or Healthy",\\n'
+                f'  "confidence": 95,\\n'
+                f'  "severity": "low/medium/high",\\n'
+                f'  "description": "detailed explanation",\\n'
+                f'  "symptoms": ["symptom 1", "symptom 2"],\\n'
+                f'  "treatment_steps": ["step 1", "step 2"],\\n'
+                f'  "prevention_tips": ["tip 1", "tip 2"],\\n'
+                f'  "organic_options": ["option 1", "option 2"]\\n'
+                f"}}\\n\\n"
+                f"Rules: If healthy set disease_name='Healthy' and severity='low'. All text in {target_lang_name}. JSON only, no extra text."
+            )
+
+            response = await self.client.chat.completions.create(
                 model="meta/llama-3.2-90b-vision-instruct",
                 messages=[
                     {
@@ -101,6 +97,7 @@ class NvidiaVisionService:
                 ],
                 max_tokens=2048,
                 temperature=0.2,
+                timeout=45.0
             )
 
             raw_content = response.choices[0].message.content.strip()
@@ -154,6 +151,15 @@ class NvidiaVisionService:
         print(f"🤖 [NVIDIA] Running Smart Parser on natural language ({language})...")
         import re
         
+        # Language names mapping
+        lang_names = {
+            "en": "English",
+            "hi": "Hindi",
+            "ta": "Tamil",
+            "te": "Telugu",
+            "mr": "Marathi"
+        }
+        
         # Determine suffix for localized keys
         is_english = (language == "en")
         suffix = f"_{language}" if not is_english else ""
@@ -171,14 +177,21 @@ class NvidiaVisionService:
             "crop_identified": "Plant"
         }
         
-        # Add localized keys if not English
-        if not is_english:
-            result[f"disease_name{suffix}"] = "एआई विशेषज्ञ अंतर्दृष्टि" if language == "hi" else "AI Insight"
-            result[f"description{suffix}"] = "विश्लेषण नीचे दिया गया है।" if language == "hi" else "Analysis provided below."
+        # Initialize ALL language keys to empty lists/strings to match frontend expectations
+        languages = ["hindi", "tamil", "telugu", "marathi"]
+        
+        for lang in languages:
+            suffix = f"_{lang}"
+            result[f"disease_name{suffix}"] = ""
+            result[f"description{suffix}"] = ""
             result[f"symptoms{suffix}"] = []
             result[f"treatment_steps{suffix}"] = []
             result[f"organic_options{suffix}"] = []
             result[f"prevention_tips{suffix}"] = []
+            result[f"crop_identified{suffix}"] = ""
+
+        # Map current requested language to its specific message if needed (fallback mostly relies on English extracted text)
+        # But we ensure keys exist.
 
         # Helper to clean up lines and remove bullet points
         def clean_line(line):
@@ -186,16 +199,17 @@ class NvidiaVisionService:
 
         # Split text into sections by likely headers
         # We look for headers like **Symptoms**, Symptoms:, 1. Symptoms, etc.
-        sections = re.split(r'\n\s*[\d\.]*\s?\*?\*?(How it was formed|How we can prevent|How we can recover|Symptoms|Crop Identified|Plant Identified|Product|Disease Name)\*?\*?:?', text, flags=re.IGNORECASE)
+        pattern = r'\n\s*[\d\.]*\s?\*?\*?(How it was formed|How we can prevent|How we can recover|Symptoms|Crop Identified|Plant Identified|Product|Disease Name)\*?\*?:?'
+        sections = re.split(pattern, text, flags=re.IGNORECASE)
         
         # The first part is usually a general description or intro
         intro_text = sections[0].strip() if sections else ""
         result["description"] = intro_text
         
-        # Comprehensive list of common crops to check for 
+        # Comprehensive list of common crops to check for (Fallback)
         common_crops = [
             "Apple", "Tomato", "Cucumber", "Potato", "Onion", "Grape", "Orange", "Banana", "Lemon", "Mango",
-            "Pepper", "Chill", "Strawberry", "Corn", "Maize", "Rice", "Wheat", "Soybean", "Pomegranate",
+            "Pepper", "Chill", "Strawberry", "Corn", "Rice", "Wheat", "Soybean", "Pomegranate",
             "Guava", "Papaya", "Brinjal", "Eggplant", "Cabbage", "Cauliflower", "Rosemary", "Tulsi", "Neem",
             "Pea", "Peas"
         ]
@@ -212,20 +226,22 @@ class NvidiaVisionService:
                 found = re.sub(r"'s$|s$|es$|leaf$|leaves$", '', found, flags=re.IGNORECASE)
                 
                 if len(found) >= 3 and found.lower() not in ignored_words: 
+                    if found.lower() == "maize": return "Corn"
                     return found
             
             # 2. Check for explicit keywords from our list
             for crop in common_crops:
                 if re.search(rf'\b{crop}\b', block, re.IGNORECASE):
                     return crop
+            
+            # Explicit check for Maize
+            if re.search(r'\bmaize\b', block, re.IGNORECASE):
+                return "Corn"
+                
             return None
 
-        # Initial extraction from intro
-        if result["crop_identified"] == "Plant":
-            potential_crop = extract_crop_name(intro_text)
-            if potential_crop: result["crop_identified"] = potential_crop
-
         # Iterate through matched headers and content
+        found_crop = None
         for i in range(1, len(sections), 2):
             if i + 1 < len(sections):
                 header = sections[i].lower()
@@ -241,13 +257,53 @@ class NvidiaVisionService:
                 elif "symptoms" in header:
                     result["symptoms"] = lines
                 elif any(x in header for x in ["crop identified", "plant identified", "product"]):
-                    result["crop_identified"] = clean_line(content.split('\n')[0])
+                    # DYNAMIC: Take what the AI said!
+                    val = clean_line(content.split('\n')[0])
+                    if val and len(val) > 2:
+                        found_crop = val
+                        # Normalize Maize to Corn
+                        if "maize" in found_crop.lower():
+                            found_crop = "Corn"
+                        result["crop_identified"] = found_crop
                 elif "disease name" in header:
                     result["disease_name"] = clean_line(content.split('\n')[0])
-                
-                # Fallback: if we still have 'Plant', try scanning this section's content too
-                if result["crop_identified"] in ["Plant", "Analysis Complete"]:
-                    potential_crop = extract_crop_name(content)
-                    if potential_crop: result["crop_identified"] = potential_crop
+        
+        # Fallback for crop if headers didn't give it
+        if result["crop_identified"] == "Plant":
+            potential_crop = extract_crop_name(text) # Scan entire text for crop keywords
+            if potential_crop: result["crop_identified"] = potential_crop
+
+        # POST-PROCESSING: Handle Healthy case & Normalization
+        full_text = text.lower()
+        
+        # 1. Robust Healthy Detection
+        is_actually_healthy = any(word in full_text for word in ["healthy", "normal", "no disease", "clear", "good health", "thriving"])
+        
+        # If the AI starts with "Healthy" or says it's healthy, and no specific disease was found by headers
+        if (full_text.startswith("healthy") or is_actually_healthy) and ("none" in result["disease_name"].lower() or result["disease_name"] == "AI Specialist Insight"):
+            result["disease_name"] = "Healthy"
+            result["severity"] = "low"
+            result["is_healthy"] = True
+            
+            # Localized versions
+            # Localized versions for "Healthy"
+            result["disease_name_hindi"] = "स्वस्थ"
+            result["disease_name_tamil"] = "ஆரோக்கியமானது"
+            result["disease_name_telugu"] = "ఆరోగ్యకరమైనది"
+            result["disease_name_marathi"] = "निरोगी"
+        else:
+            # Default to medium if not clearly healthy and not already set
+            if result["disease_name"] == "AI Specialist Insight":
+                 # If severe keywords found, bump it
+                 if any(w in full_text for w in ["severe", "deadly", "critical", "kill", "destroy"]):
+                     result["severity"] = "high"
+                 result["is_healthy"] = False
+            else:
+                 # If we found a disease name, check if it explicitly says healthy
+                 if "healthy" in result["disease_name"].lower():
+                     result["severity"] = "low"
+                     result["is_healthy"] = True
+                 else:
+                     result["is_healthy"] = False
 
         return result

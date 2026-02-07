@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp, X, Filter, BarChart3 } from 'lucide-react';
+import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp, X, Filter, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTranslation } from '@/lib/translations';
 import { mandiService, type MandiPriceRecord } from '@/services/mandiService';
 
 interface MarketPriceScreenProps {
     language: string;
+    isOnline: boolean;
     onShareChat?: (record: MandiPriceRecord) => void;
 }
 
-export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, onShareChat }) => {
+export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, isOnline, onShareChat }) => {
     const [prices, setPrices] = useState<MandiPriceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
     const [analyses, setAnalyses] = useState<Record<string, string>>({});
     const [expandedAnalyses, setExpandedAnalyses] = useState<Record<string, boolean>>({});
+    const [loadingAnalyses, setLoadingAnalyses] = useState<Record<string, boolean>>({});
 
     // Filtering State
     const [selectedState, setSelectedState] = useState<string>('all');
@@ -43,10 +45,7 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
             setOriginalPrices(data.records);
             setError(null);
 
-            // Automatically trigger analysis for the first 5 records
-            data.records.slice(0, 5).forEach(record => {
-                getAIAnalysis(record);
-            });
+
         } catch (err) {
             setError(t.error);
         } finally {
@@ -108,6 +107,7 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
         const id = `${record.market}-${record.commodity}-${record.modal_price}`;
         if (analyses[id]) return;
 
+        setLoadingAnalyses(prev => ({ ...prev, [id]: true }));
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
             const response = await fetch(`${apiUrl}/market/analyze`, {
@@ -122,15 +122,25 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
             }
         } catch (err) {
             console.error("AI Analysis failed", err);
+        } finally {
+            setLoadingAnalyses(prev => ({ ...prev, [id]: false }));
         }
     };
 
-    const toggleAnalysis = (id: string) => {
+    const toggleAnalysis = (record: MandiPriceRecord) => {
+        const id = `${record.market}-${record.commodity}-${record.modal_price}`;
+
+        if (!expandedAnalyses[id] && !analyses[id]) {
+            getAIAnalysis(record);
+        }
+
         setExpandedAnalyses(prev => ({
             ...prev,
             [id]: !prev[id]
         }));
     };
+
+
 
     const filteredPrices = prices.filter(p => {
         const matchesSearch = p.commodity.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -177,6 +187,15 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                         <RefreshCw size={20} />
                     </button>
                 </div>
+
+                {/* Last Updated Timestamp (Offline Only) */}
+                {!isOnline && prices.length > 0 && prices[0].timestamp && (
+                    <div className="flex justify-end -mt-4 mb-4">
+                        <span className="text-[10px] text-muted-foreground font-medium bg-muted/50 px-2 py-1 rounded-full border border-border/50">
+                            Last Updated: {new Date(prices[0].timestamp).toLocaleString()}
+                        </span>
+                    </div>
+                )}
 
                 {/* Search Bar */}
                 <div className="relative mb-6 group">
@@ -401,39 +420,45 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                                             </button>
                                         </div>
 
-                                        {/* AI Analysis Section (Dynamic Update) */}
-                                        {analysis && (
-                                            <div className="mt-4 rounded-apple bg-primary/5 border border-primary/10 overflow-hidden transition-all duration-300">
-                                                <button
-                                                    onClick={() => toggleAnalysis(id)}
-                                                    className="w-full flex items-center justify-between p-4 hover:bg-primary/5 transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-2 text-primary">
-                                                        <img src="/logo.svg" alt="App Logo" className="w-5 h-5 object-contain" />
-                                                        <span className="text-caption font-bold uppercase tracking-wider">{t.aiAdvice}</span>
-                                                    </div>
-                                                    {expandedAnalyses[id] ? (
-                                                        <ChevronUp size={16} className="text-primary/70" />
-                                                    ) : (
-                                                        <ChevronDown size={16} className="text-primary/70" />
-                                                    )}
-                                                </button>
 
-                                                {expandedAnalyses[id] && (
-                                                    <div className="px-4 pb-4 animate-in slide-in-from-top-2 fade-in duration-200">
-                                                        <p className="text-body text-foreground leading-relaxed">
-                                                            {analysis}
-                                                        </p>
-                                                        <div className="mt-3 flex justify-end">
-                                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/50 px-2 py-0.5 rounded-full border border-border/50">
-                                                                <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
-                                                                <span>AI-Powered Insights</span>
-                                                            </div>
+
+                                        {/* AI Analysis Section (Dynamic Update) */}
+                                        <div className="mt-4 rounded-apple bg-primary/5 border border-primary/10 overflow-hidden transition-all duration-300">
+                                            <button
+                                                onClick={() => toggleAnalysis(record)}
+                                                className="w-full flex items-center justify-between p-4 hover:bg-primary/5 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 text-primary">
+                                                    {loadingAnalyses[id] ? (
+                                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                                    ) : (
+                                                        <img src="/logo.svg" alt="App Logo" className="w-5 h-5 object-contain" />
+                                                    )}
+                                                    <span className="text-caption font-bold uppercase tracking-wider">
+                                                        {loadingAnalyses[id] ? "Asking Expert..." : t.aiAdvice}
+                                                    </span>
+                                                </div>
+                                                {expandedAnalyses[id] ? (
+                                                    <ChevronUp size={16} className="text-primary/70" />
+                                                ) : (
+                                                    <ChevronDown size={16} className="text-primary/70" />
+                                                )}
+                                            </button>
+
+                                            {expandedAnalyses[id] && analysis && (
+                                                <div className="px-4 pb-4 animate-in slide-in-from-top-2 fade-in duration-200">
+                                                    <p className="text-body text-foreground leading-relaxed">
+                                                        {analysis}
+                                                    </p>
+                                                    <div className="mt-3 flex justify-end">
+                                                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/50 px-2 py-0.5 rounded-full border border-border/50">
+                                                            <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                                                            <span>AI-Powered Insights</span>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );

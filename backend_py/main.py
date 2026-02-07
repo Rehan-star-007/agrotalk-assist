@@ -60,6 +60,10 @@ async def startup_event():
     print("📦 Loading YOLO model...")
     model_path = os.environ.get("MODEL_PATH", None)
     detector = PlantDiseaseDetector(model_path=model_path)
+    if detector and detector.model is not None:
+        print(f"✅ YOLO Model loaded successfully (Classes: {len(detector.names)})")
+    else:
+        print("⚠️ YOLO Model NOT loaded - will use NVIDIA Vision fallback only")
     
     print("🧠 Initializing NVIDIA Vision Service...")
     nvidia_service = NvidiaVisionService()
@@ -104,7 +108,13 @@ async def analyze_image(request: AnalyzeRequest):
             if not nvidia_service:
                 raise HTTPException(status_code=503, detail="NVIDIA service not initialized")
             
-            result = nvidia_service.analyze_image(request.image, request.language)
+            # Add explicit timeout for the API call wrapper (just in case)
+            import asyncio
+            try:
+                result = await asyncio.wait_for(nvidia_service.analyze_image(request.image, request.language), timeout=50.0)
+            except asyncio.TimeoutError:
+                raise HTTPException(status_code=504, detail="NVIDIA Analysis timed out")
+            
             if not result["success"]:
                  raise HTTPException(status_code=500, detail=result["error"])
             
@@ -129,31 +139,45 @@ async def analyze_image(request: AnalyzeRequest):
 
         model_input = preprocess_image(original_image, target_size=(224, 224))
         
-        # 2. Run Model
+        # 2. Run Model (Offload to thread pool to prevent blocking event loop)
         print("🤖 [ANALYZE] Running YOLO inference...")
-        result = detector.detect(model_input)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        # Run synchronous YOLO detect in a separate thread
+        result = await loop.run_in_executor(None, detector.detect, model_input)
         
         # 3. Enhance with NVIDIA AI (if available) for much better naming
         if nvidia_service and nvidia_service.client:
             try:
                 print("🧠 [ANALYZE] Enhancing with NVIDIA Specialist Insight...")
                 # Request a quick analysis from NVIDIA to get the real names
-                nv_result = nvidia_service.analyze_image(request.image, request.language)
-                if nv_result["success"]:
-                    nv_analysis = nv_result["analysis"]
-                    # Merge NVIDIA's accurate names and descriptions into the result
-                    result["disease_name"] = nv_analysis.get("disease_name", result["disease_name"])
-                    result["disease_name_hindi"] = nv_analysis.get(f"disease_name_{request.language}", nv_analysis.get("disease_name_localized", result["disease_name_hindi"]))
-                    result["crop_identified"] = nv_analysis.get("crop_identified", result["crop_identified"])
-                    result["description"] = nv_analysis.get("description", result["description"])
-                    result["description_hindi"] = nv_analysis.get(f"description_{request.language}", nv_analysis.get("description_localized", result["description_hindi"]))
-                    result["symptoms"] = nv_analysis.get("symptoms", result["symptoms"])
-                    result["treatment_steps"] = nv_analysis.get("treatment_steps", result["treatment_steps"])
-                    result["organic_options"] = nv_analysis.get("organic_options", result["organic_options"])
-                    result["prevention_tips"] = nv_analysis.get("prevention_tips", result["prevention_tips"])
-                    # Use NVIDIA's confidence if it's high
-                    if nv_analysis.get("confidence"):
-                        result["confidence"] = nv_analysis["confidence"]
+                # Add a shorter timeout for enhancement - if it takes too long, just use YOLO
+                try:
+                    nv_result = await asyncio.wait_for(nvidia_service.analyze_image(request.image, request.language), timeout=15.0)
+                    if nv_result["success"]:
+                        nv_analysis = nv_result["analysis"]
+                        # Merge NVIDIA's accurate names and descriptions into the result
+                        result["disease_name"] = nv_analysis.get("disease_name", result["disease_name"])
+                        result["disease_name_hindi"] = nv_analysis.get(f"disease_name_{request.language}", nv_analysis.get("disease_name_localized", result["disease_name_hindi"]))
+                        result["crop_identified"] = nv_analysis.get("crop_identified", result["crop_identified"])
+                        result["description"] = nv_analysis.get("description", result["description"])
+                        result["description_hindi"] = nv_analysis.get(f"description_{request.language}", nv_analysis.get("description_localized", result["description_hindi"]))
+                        result["symptoms"] = nv_analysis.get("symptoms", result["symptoms"])
+                        result["treatment_steps"] = nv_analysis.get("treatment_steps", result["treatment_steps"])
+                        result["organic_options"] = nv_analysis.get("organic_options", result["organic_options"])
+                        result["prevention_tips"] = nv_analysis.get("prevention_tips", result["prevention_tips"])
+                        # Use NVIDIA's confidence if it's high
+                        if nv_analysis.get("confidence"):
+                            result["confidence"] = nv_analysis["confidence"]
+                        # SYNC HEALTH STATUS
+                        if "is_healthy" in nv_analysis:
+                            result["is_healthy"] = nv_analysis["is_healthy"]
+                        if "severity" in nv_analysis:
+                            result["severity"] = nv_analysis["severity"]
+                    else:
+                        print(f"⚠️ [ANALYZE] NVIDIA enhancement returned error: {nv_result.get('error')}")
+                except asyncio.TimeoutError:
+                    print("⚠️ [ANALYZE] NVIDIA enhancement timed out - Proceeding with YOLO result only")
             except Exception as nve:
                 print(f"⚠️ [ANALYZE] NVIDIA enhancement failed: {nve}")
 

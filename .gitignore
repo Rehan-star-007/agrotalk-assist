@@ -34,13 +34,21 @@ backend_py/__pycache__/
 .env
 .env.local
 .env.openrouter
-# .env.market
+.env.market
 .env.nvidia
 
 # Models
 *.pt
 *.weights
 *.h5
+
+# Debug and test output files
+debug_output*.txt
+test_output*.txt
+*.mp3
+
+# Test audio folder
+test_audio/
 
 # Local Data and Uploads
 backend/data/*

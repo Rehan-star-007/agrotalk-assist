@@ -1,25 +1,21 @@
 /**
- * NVIDIA TTS Service
+ * NVIDIA TTS Service (Proxy to Python Backend)
  * 
- * Generates natural human-like speech using NVIDIA Cloud APIs (NVIDIA NIM).
+ * Routes TTS requests to the Python backend which handles:
+ * - NVIDIA gRPC TTS for English
+ * - Edge TTS fallback for Indian languages (Hindi, Tamil, Telugu, Marathi)
  */
 
+const PYTHON_TTS_URL = 'http://localhost:8000/api/tts';
+
 /**
- * Generate speech audio using NVIDIA TTS API
+ * Generate speech audio by proxying to Python TTS service
  * 
  * @param {string} text - The text to convert to speech
  * @param {string} language - Language code (en, hi, ta, te, mr)
  * @returns {Buffer|null} - Audio buffer (mp3/wav) or null on failure
  */
 async function generateNvidiaSpeech(text, language = 'en') {
-    const apiKey = process.env.NVIDIA_API_KEY;
-    const url = process.env.NVIDIA_TTS_URL || 'https://ai.api.nvidia.com/v1/audio/nvidia/tts';
-
-    if (!apiKey) {
-        console.warn('⚠️ NVIDIA_API_KEY missing in environment variables');
-        return null;
-    }
-
     // Clean text for TTS (remove markdown formatting)
     const cleanText = text
         .replace(/\*\*/g, '')
@@ -28,61 +24,65 @@ async function generateNvidiaSpeech(text, language = 'en') {
         .replace(/#{1,6}\s*/g, '')
         .trim();
 
-    // Map language codes and choose appropriate neutral voices
-    const langConfig = {
-        'en': { lang: 'en-US', voice: 'English-US.Female-1' },
-        'hi': { lang: 'hi-IN', voice: 'Hindi-IN.Female-1' },
-        'ta': { lang: 'ta-IN', voice: 'Tamil-IN.Female-1' },
-        'te': { lang: 'te-IN', voice: 'Telugu-IN.Female-1' },
-        'mr': { lang: 'mr-IN', voice: 'Marathi-IN.Female-1' }
-    };
+    if (!cleanText) {
+        console.warn('⚠️ Empty text provided to TTS');
+        return null;
+    }
 
-    const config = langConfig[language] || langConfig.en;
+    console.log(`🔊 [TTS Proxy] Requesting speech for: "${cleanText.slice(0, 30)}..." (${language})`);
+
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
-        console.log(`🔊 [NVIDIA TTS] Requesting speech for: "${cleanText.slice(0, 30)}..."`);
-        console.log(`🌐 Config: ${config.lang} / ${config.voice}`);
-
-        const response = await fetch(url, {
+        const response = await fetch(PYTHON_TTS_URL, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'Accept': 'audio/mpeg'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "nvidia/magpie-tts-en-us-100m-v1", // Default model
-                text: cleanText,
-                language: config.lang,
-                voice: config.voice,
-                response_format: "mp3"
-            })
+                text: cleanText.slice(0, 4000), // Max chars
+                language: language,
+                voice: 'mia' // Default voice for NVIDIA, ignored for Edge TTS
+            }),
+            signal: controller.signal
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-            let errText = "";
+            let errText = '';
             try {
                 const errBody = await response.json();
                 errText = JSON.stringify(errBody);
             } catch (e) {
                 errText = await response.text();
             }
-            console.error(`❌ NVIDIA TTS API Error (${response.status}):`, errText);
-
-            // Helpful hint for key issues
-            if (response.status === 401 || response.status === 403) {
-                console.error('🔑 Authentication failed. Please verify your NVIDIA API key in .env.nvidia');
-            }
-
+            console.error(`❌ Python TTS Error (${response.status}):`, errText);
             return null;
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        console.log(`✅ Received audio buffer (${arrayBuffer.byteLength} bytes)`);
-        return Buffer.from(arrayBuffer);
+        const data = await response.json();
+
+        if (data.success && data.audio) {
+            const audioBuffer = Buffer.from(data.audio, 'base64');
+            console.log(`✅ Received audio buffer (${audioBuffer.length} bytes)`);
+            return audioBuffer;
+        }
+
+        console.warn('⚠️ TTS returned success but no audio data');
+        return null;
 
     } catch (error) {
-        console.error('❌ NVIDIA TTS Service Exception:', error.message);
+        clearTimeout(timeoutId);
+
+        if (error.name === 'AbortError') {
+            console.error('❌ TTS request timed out after 30 seconds');
+        } else {
+            console.error('❌ TTS Service Exception:', error.message);
+        }
+
         return null;
     }
 }

@@ -23,6 +23,7 @@ interface WeatherDashboardProps {
   loading: boolean;
   error: string | null;
   language?: string;
+  lastUpdated?: number | null;
 }
 
 // Weather icon components
@@ -89,7 +90,8 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
   data,
   loading,
   error,
-  language = 'en'
+  language = 'en',
+  lastUpdated
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const t = getTranslation('weather', language);
@@ -157,71 +159,74 @@ export const WeatherDashboard: React.FC<WeatherDashboardProps> = ({
 
             <div className="flex flex-col items-end gap-1">
               <WeatherIcon code={data.current.weather_code} size="lg" isNight={isNight} />
-              <div className="flex items-center gap-1 text-subhead opacity-80">
-                <Droplets size={16} />
-                <span>{data.current.relative_humidity_2m}%</span>
-              </div>
+              <span>{data.current.relative_humidity_2m}%</span>
             </div>
-          </div>
-
-          <div className="flex items-center justify-center mt-1 text-white/60">
-            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            {/* Last Updated Time */}
+            {lastUpdated && (
+              <p className="text-[9px] text-white/60 mt-0.5">
+                Updated: {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Expanded Forecast Section */}
-        {isExpanded && data.daily && (
-          <div className="bg-background/95 backdrop-blur-sm text-foreground p-4 animate-fade-in border-t border-white/10">
-            <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              {t.forecast}
-            </h3>
-            <div className="grid grid-cols-5 gap-2">
-              {data.daily.time.slice(0, 5).map((time, idx) => {
-                const dateInfo = formatDate(time, language);
-                const isToday = idx === 0;
-                // Daily icons need to be colored for the white background, so we use a different coloring logic or just standard icons
-                // We can use the same WeatherIcon but it's designed for green background (white/light colors). 
-                // Let's rely on the text color mostly.
+        <div className="flex items-center justify-center mt-1 text-white/60">
+          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
+      </div>
 
-                return (
-                  <div key={idx} className="flex flex-col items-center text-center">
-                    <p className={cn("text-[10px] font-bold uppercase", isToday ? "text-primary" : "text-muted-foreground")}>
-                      {isToday ? t.today : dateInfo.day.slice(0, 3)}
-                    </p>
-                    <p className="text-caption font-bold my-1">{Math.round(data.daily!.temperature_2m_max[idx])}°</p>
-                    <div className="opacity-70 my-1">
-                      {/* We need icons visible on white. Using valid colors from lucide or custom */}
-                      <div className="text-foreground">
-                        {/* Simple fallback icon for list */}
-                        {data.daily!.weather_code[idx] <= 3 ? <Sun size={16} className="text-amber-500" /> : <CloudRain size={16} className="text-sky-500" />}
-                      </div>
+      {/* Expanded Forecast Section */}
+      {isExpanded && data.daily && (
+        <div className="bg-background/95 backdrop-blur-sm text-foreground p-4 animate-fade-in border-t border-white/10">
+          <h3 className="text-caption font-bold uppercase tracking-widest text-muted-foreground mb-3">
+            {t.forecast}
+          </h3>
+          <div className="grid grid-cols-5 gap-2">
+            {data.daily.time.slice(0, 5).map((time, idx) => {
+              const dateInfo = formatDate(time, language);
+              const isToday = idx === 0;
+              // Daily icons need to be colored for the white background, so we use a different coloring logic or just standard icons
+              // We can use the same WeatherIcon but it's designed for green background (white/light colors). 
+              // Let's rely on the text color mostly.
+
+              return (
+                <div key={idx} className="flex flex-col items-center text-center">
+                  <p className={cn("text-[10px] font-bold uppercase", isToday ? "text-primary" : "text-muted-foreground")}>
+                    {isToday ? t.today : dateInfo.day.slice(0, 3)}
+                  </p>
+                  <p className="text-caption font-bold my-1">{Math.round(data.daily!.temperature_2m_max[idx])}°</p>
+                  <div className="opacity-70 my-1">
+                    {/* We need icons visible on white. Using valid colors from lucide or custom */}
+                    <div className="text-foreground">
+                      {/* Simple fallback icon for list */}
+                      {data.daily!.weather_code[idx] <= 3 ? <Sun size={16} className="text-amber-500" /> : <CloudRain size={16} className="text-sky-500" />}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">{Math.round(data.daily!.temperature_2m_min[idx])}°</p>
                   </div>
-                );
-              })}
-            </div>
+                  <p className="text-[10px] text-muted-foreground">{Math.round(data.daily!.temperature_2m_min[idx])}°</p>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Additional Details */}
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              <div className="flex items-center gap-3 p-3 bg-muted rounded-apple border border-border">
-                <Wind size={18} className="text-slate-500" />
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">{t.wind}</p>
-                  <p className="text-body font-bold">{data.current.wind_speed_10m} km/h</p>
-                </div>
+          {/* Additional Details */}
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="flex items-center gap-3 p-3 bg-muted rounded-apple border border-border">
+              <Wind size={18} className="text-slate-500" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">{t.wind}</p>
+                <p className="text-body font-bold">{data.current.wind_speed_10m} km/h</p>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-muted rounded-apple border border-border">
-                <Droplets size={18} className="text-sky-500" />
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">{t.humidity}</p>
-                  <p className="text-body font-bold">{data.current.relative_humidity_2m}%</p>
-                </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-muted rounded-apple border border-border">
+              <Droplets size={18} className="text-sky-500" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">{t.humidity}</p>
+                <p className="text-body font-bold">{data.current.relative_humidity_2m}%</p>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

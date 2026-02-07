@@ -1,43 +1,35 @@
-import { WifiOff, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { WifiOff } from "lucide-react";
+import { useEffect, useState } from "react";
 
-interface OfflineBannerProps {
-  language: string;
-}
+export function OfflineBanner() {
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-export function OfflineBanner({ language }: OfflineBannerProps) {
-  const message = language === "hi" 
-    ? "कोई इंटरनेट नहीं - सहेजी गई सलाह उपयोग कर रहे हैं"
-    : "No internet connection";
+    useEffect(() => {
+        const checkStatus = () => {
+            const forced = localStorage.getItem('agro_force_offline') === 'true';
+            setIsOnline(navigator.onLine && !forced);
+        };
 
-  const buttonText = language === "hi" ? "पुनः प्रयास करें" : "Retry";
+        window.addEventListener("online", checkStatus);
+        window.addEventListener("offline", checkStatus);
+        window.addEventListener("offline-mode-change", checkStatus);
 
-  return (
-    <div 
-      className={cn(
-        "fixed top-0 left-0 right-0 z-40",
-        "bg-destructive/95 text-destructive-foreground",
-        "px-4 py-3 animate-slide-up"
-      )}
-      role="alert"
-    >
-      <div className="flex items-center justify-between max-w-lg mx-auto">
-        <div className="flex items-center gap-2">
-          <WifiOff size={18} />
-          <span className="text-footnote font-medium">{message}</span>
+        // Initial check
+        checkStatus();
+
+        return () => {
+            window.removeEventListener("online", checkStatus);
+            window.removeEventListener("offline", checkStatus);
+            window.removeEventListener("offline-mode-change", checkStatus);
+        };
+    }, []);
+
+    if (isOnline) return null;
+
+    return (
+        <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm text-center font-medium animate-in slide-in-from-top flex items-center justify-center gap-2">
+            <WifiOff size={14} />
+            <span>You are currently offline. Using local data.</span>
         </div>
-        <button
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full",
-            "bg-white/20 hover:bg-white/30 transition-colors",
-            "text-footnote font-semibold active:scale-95"
-          )}
-          onClick={() => window.location.reload()}
-        >
-          <RefreshCw size={14} />
-          {buttonText}
-        </button>
-      </div>
-    </div>
-  );
+    );
 }

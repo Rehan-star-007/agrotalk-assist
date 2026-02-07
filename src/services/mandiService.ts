@@ -13,6 +13,7 @@ export interface MandiPriceRecord {
     min_price: string;
     max_price: string;
     modal_price: string;
+    timestamp?: number;
 }
 
 export interface MandiApiResponse {
@@ -20,6 +21,8 @@ export interface MandiApiResponse {
     total: number;
     count: number;
 }
+
+import { dbService } from './db';
 
 const API_KEY = import.meta.env.VITE_MANDI_API_KEY;
 const BASE_URL = import.meta.env.VITE_MANDI_API_BASE_URL || 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070';
@@ -90,23 +93,28 @@ const MOCK_RECORDS: MandiPriceRecord[] = [
 
 export const mandiService = {
     fetchPrices: async (limit = 10, offset = 0, commodity?: string): Promise<MandiApiResponse> => {
-        // If no API key is provided, return mock data
-        if (!API_KEY) {
-            console.warn("No Mandi API key provided. Using mock data.");
-            return {
-                records: commodity
-                    ? MOCK_RECORDS.filter(r => r.commodity.toLowerCase().includes(commodity.toLowerCase()))
-                    : MOCK_RECORDS,
-                total: MOCK_RECORDS.length,
-                count: MOCK_RECORDS.length
-            };
-        }
-
+        // 1. Try to fetch from API
         try {
+            // Check online status first to fail fast and use cache
+            if (!navigator.onLine) {
+                throw new Error("Offline");
+            }
+
+            // If no API key is provided, return mock data (dev mode)
+            if (!API_KEY) {
+                console.warn("No Mandi API key provided. Using mock data.");
+                return {
+                    records: commodity
+                        ? MOCK_RECORDS.filter(r => r.commodity.toLowerCase().includes(commodity.toLowerCase()))
+                        : MOCK_RECORDS,
+                    total: MOCK_RECORDS.length,
+                    count: MOCK_RECORDS.length
+                };
+            }
+
             // First try with exact filter for commodity as it's more precise
             let url = `${BASE_URL}?api-key=${API_KEY}&format=json&limit=${limit}&offset=${offset}`;
             if (commodity) {
-                // If it's a multi-word search, q might be better, but filters[commodity] is the standard for this API
                 url += `&filters[commodity]=${encodeURIComponent(commodity)}`;
             }
 
@@ -119,7 +127,7 @@ export const mandiService = {
 
             let data = await response.json();
 
-            // If no results with exact filter, try a broader 'q' search (supported by some OGD datasets)
+            // If no results with exact filter, try a broader 'q' search
             if (commodity && (!data.records || data.records.length === 0)) {
                 console.log(`🔍 No matches for filter. Trying broader search with q=${commodity}...`);
                 const qUrl = `${BASE_URL}?api-key=${API_KEY}&format=json&limit=${limit}&offset=${offset}&q=${encodeURIComponent(commodity)}`;
@@ -132,25 +140,68 @@ export const mandiService = {
                 }
             }
 
-            // If we have records (even if empty after broad search), return them
-            // ONLY fallback to mock data if it's the INITIAL LOAD (no commodity) and it's empty
-            if (!commodity && (!data.records || data.records.length === 0)) {
-                console.warn("⚠️ Mandi API returned empty records on initial load. Using mock data.");
-                return {
-                    records: MOCK_RECORDS,
-                    total: MOCK_RECORDS.length,
-                    count: MOCK_RECORDS.length
-                };
+            const records: MandiPriceRecord[] = data.records || [];
+
+            // 2. Cache successful results to IndexedDB
+            if (records.length > 0) {
+                console.log(`💾 Caching ${records.length} market records...`);
+                // We don't await this to keep UI snappy, but we catch errors
+                Promise.all(records.map(record => {
+                    const id = `${record.state}_${record.district}_${record.market}_${record.commodity}`;
+                    return dbService.put('market_data', {
+                        id: id.replace(/\s+/g, '_').toLowerCase(),
+                        ...record,
+                        timestamp: Date.now()
+                    });
+                })).catch(err => console.error("Failed to cache market data", err));
             }
 
             return {
-                records: data.records || [],
-                total: data.total || 0,
-                count: data.count || 0
+                records: records,
+                total: data.total || records.length,
+                count: data.count || records.length
             };
+
         } catch (error) {
-            console.error("❌ Error fetching mandi prices:", error);
-            // On hard error, fallback to filtered mock records if commodity exists
+            console.warn("⚠️ Market API Failed/Offline. Switching to Local DB...", error);
+
+            // 3. Fallback to IndexedDB
+            try {
+                let cachedRecords: any[] = [];
+
+                if (commodity) {
+                    // Start transaction to search
+                    // Since 'commodity' index might not be fuzzy, we might get all and filter
+                    // For now, let's get all and filter in JS (dataset likely < 1000 items locally)
+                    const allData = await dbService.getAll('market_data');
+                    cachedRecords = allData.filter(item =>
+                        item.commodity.toLowerCase().includes(commodity.toLowerCase()) ||
+                        item.market.toLowerCase().includes(commodity.toLowerCase())
+                    );
+                } else {
+                    // Get all recent records (maybe limit to 50 for performance)
+                    cachedRecords = await dbService.getAll('market_data');
+                }
+
+                // Sort by timestamp if available (newest first) but our DB puts don't strictly order returning .getAll()
+                // so we sort manually
+                cachedRecords.sort((a, b) => b.timestamp - a.timestamp);
+
+                if (cachedRecords.length > 0) {
+                    console.log(`✅ Loaded ${cachedRecords.length} records from Offline Cache`);
+                    return {
+                        records: cachedRecords,
+                        total: cachedRecords.length,
+                        count: cachedRecords.length
+                    };
+                }
+
+            } catch (dbError) {
+                console.error("❌ Failed to read from Offline DB", dbError);
+            }
+
+            // 4. Final Fallback to MOCK_RECORDS
+            console.warn("⚠️ No local cache found. Using Mock Data.");
             const filteredMock = commodity
                 ? MOCK_RECORDS.filter(r => r.commodity.toLowerCase().includes(commodity.toLowerCase()))
                 : MOCK_RECORDS;

@@ -66,7 +66,7 @@ class PlantDiseaseDetector:
         "wheat": "Wheat", "barley": "Wheat", "rye": "Wheat", "oat": "Wheat",
         "grain": "Wheat", "cereal": "Wheat", "spike": "Wheat", "straw": "Wheat",
         "ear": "Wheat",  # Ear of wheat, not corn
-        "corn": "Corn", "maize": "Corn", "cob": "Corn", "kernel": "Corn",
+        "corn": "Corn", "cob": "Corn", "kernel": "Corn",
         
         # Fruits
         "apple": "Apple", "granny": "Apple", "red delicious": "Apple",
@@ -120,14 +120,19 @@ class PlantDiseaseDetector:
     def _load_model(self):
         try:
             if YOLO is None:
-                print("⚠️ ultralytics not installed, using fallback mode")
+                print("❌ ultralytics not installed! Run: pip install ultralytics")
                 self.model = None
                 self.names = {}
                 return
-            self.model = YOLO(self.model_path if self.model_path else "yolov8n-cls.pt")
+            model_file = self.model_path if self.model_path else "yolov8n-cls.pt"
+            print(f"   Loading model: {model_file}")
+            self.model = YOLO(model_file)
             self.names = self.model.names
+            print(f"   ✅ YOLO model ready with {len(self.names)} classes")
         except Exception as e:
-            print(f"Model Load Error: {e}")
+            print(f"❌ YOLO Model Load Error: {e}")
+            import traceback
+            traceback.print_exc()
             self.model = None
             self.names = {}
 
@@ -377,7 +382,7 @@ class PlantDiseaseDetector:
 
     def _get_healthy_result(self, conf: float, crop: str) -> dict:
         return {
-            "disease_name": f"Healthy {crop}",
+            "disease_name": "Healthy",
             "disease_name_hindi": f"स्वस्थ {crop}",
             "crop_identified": crop,
             "confidence": min(99.9, round(conf + 15, 1)),

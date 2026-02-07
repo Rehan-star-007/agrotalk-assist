@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Camera, X, Volume2, VolumeX, Send, Sparkles, Bot, User, Play, Pause, RotateCcw, Mic, ChevronDown, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { dbService } from '@/services/db';
+import { syncService } from '@/services/syncService';
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { LanguageSelector } from "@/components/LanguageSelector";
@@ -46,6 +48,7 @@ export default function Index() {
   const [weatherData, setWeatherData] = useState<any>(null);
   const [isWeatherLoading, setIsWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [weatherLastUpdated, setWeatherLastUpdated] = useState<number | null>(null);
 
   // Chat state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -88,10 +91,35 @@ export default function Index() {
   const fetchWeather = async (lat: number, lon: number) => {
     try {
       setIsWeatherLoading(true);
+      // Try cache first
+      try {
+        const cached = await dbService.get('weather_cache', 'current');
+        if (cached && (Date.now() - cached.lastUpdated < 3600000)) { // 1 hour cache
+          setWeatherData(cached.data);
+          setWeatherLastUpdated(cached.lastUpdated);
+          setIsWeatherLoading(false);
+          // don't return, fetch in background if possible or just use cache
+          // for now, let's fetch to update if online
+        }
+      } catch (e) { console.error(e); }
+
+      if (!navigator.onLine) {
+        setIsWeatherLoading(false);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/weather?lat=${lat}&lon=${lon}`);
       const result = await response.json();
       if (result.success) {
+        const now = Date.now();
         setWeatherData(result.data);
+        setWeatherLastUpdated(now);
+        // Save to cache
+        await dbService.put('weather_cache', {
+          id: 'current',
+          data: result.data,
+          lastUpdated: now
+        });
       } else {
         setWeatherError(result.error || 'Failed to fetch weather');
       }
@@ -115,13 +143,34 @@ export default function Index() {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      const forced = localStorage.getItem('agro_force_offline') === 'true';
+      setIsOnline(!forced);
+    };
     const handleOffline = () => setIsOnline(false);
+    const handleOfflineModeChange = () => {
+      const forced = localStorage.getItem('agro_force_offline') === 'true';
+      setIsOnline(navigator.onLine && !forced);
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("offline-mode-change", handleOfflineModeChange);
+
+    // Initial check
+    const forced = localStorage.getItem('agro_force_offline') === 'true';
+    setIsOnline(navigator.onLine && !forced);
+
+    // Auto-Save / Sync on Launch
+    const autoSave = localStorage.getItem("agro_auto_save") !== "false";
+    if (navigator.onLine && !forced && autoSave) {
+      syncService.syncAll();
+    }
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("offline-mode-change", handleOfflineModeChange);
     };
   }, []);
 
@@ -396,10 +445,12 @@ export default function Index() {
           id: `assistant_${m.id}`,
           role: 'assistant',
           content: m.response,
-          timestamp: new Date(new Date(m.timestamp).getTime() + 1000),
+          timestamp: new Date(new Date(m.timestamp).getTime() + 1000), // add 1s ordering
           condition: undefined
         }
-      ]).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      ])
+        .filter((msg) => msg.content && msg.content.trim() !== '') // Filter empty messages
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     } else {
       // Fallback for legacy single items
       messages = [
@@ -711,6 +762,7 @@ export default function Index() {
             loading={isWeatherLoading}
             error={weatherError}
             language={language}
+            lastUpdated={!isOnline ? weatherLastUpdated : null}
           />
         </header>
 
@@ -799,6 +851,7 @@ export default function Index() {
   const handleShareToChat = (analysis: any) => {
     setIsImageOpen(false);
     setIsChatMode(true);
+    setActiveTab("home");
 
     // Get translations for the current language
     const tLib = getTranslation('library', language);
@@ -853,6 +906,9 @@ export default function Index() {
     ].slice(-10));
 
     toast.success(getTranslation('common', language).success || "Analysis added to chat context");
+
+    // Automatically trigger AI response
+    processResponse(introMsg);
   };
 
   const handleMarketShare = (record: any) => {
@@ -907,7 +963,6 @@ export default function Index() {
             isWeatherLoading={isWeatherLoading}
             onShareChat={(analysis) => {
               handleShareToChat(analysis);
-              setActiveTab("home");
             }}
           />
         )}
@@ -917,6 +972,7 @@ export default function Index() {
         {activeTab === "market" && (
           <MarketPriceScreen
             language={language}
+            isOnline={isOnline}
             onShareChat={handleMarketShare}
           />
         )}

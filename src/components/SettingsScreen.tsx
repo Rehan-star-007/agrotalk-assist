@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import {
   Volume2, Globe, Moon, Sun, Trash2, Bell, ChevronRight,
-  MapPin, Zap, HardDrive, RefreshCw
+  MapPin, Zap, HardDrive, RefreshCw, WifiOff, DownloadCloud
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
+import { syncService } from "@/services/syncService";
 import { toast } from "sonner";
 
 interface SettingsScreenProps {
@@ -169,6 +170,15 @@ export function SettingsScreen({
     return localStorage.getItem("dataSaver") === "true";
   });
 
+  const [forceOffline, setForceOffline] = useState(() => {
+    return localStorage.getItem("agro_force_offline") === "true";
+  });
+
+  const [autoSave, setAutoSave] = useState(() => {
+    // Default to true if not set, or check user pref
+    return localStorage.getItem("agro_auto_save") !== "false";
+  });
+
   const [locationName, setLocationName] = useState("Delhi, India");
 
   useEffect(() => {
@@ -188,6 +198,25 @@ export function SettingsScreen({
       // In a real app we'd reverse geocode here
       setLocationName(`${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}`);
     });
+  }, []);
+
+  const [storageUsage, setStorageUsage] = useState<string>("");
+
+  useEffect(() => {
+    const fetchStorageObj = async () => {
+      if (navigator.storage && navigator.storage.estimate) {
+        try {
+          const estimate = await navigator.storage.estimate();
+          if (estimate.usage) {
+            const mb = (estimate.usage / (1024 * 1024)).toFixed(1);
+            setStorageUsage(`${mb} MB used`);
+          }
+        } catch (e) {
+          console.error("Storage estimate failed", e);
+        }
+      }
+    };
+    fetchStorageObj();
   }, []);
 
   const handleToggleInternal = (
@@ -343,9 +372,62 @@ export function SettingsScreen({
         {/* STORAGE & DATA */}
         <section>
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 mb-3 px-2">
-            {t.storage}
+            {t.storage || "Storage & Data"}
           </h2>
           <div className="bg-card rounded-apple-lg border border-border/60 shadow-apple-sm overflow-hidden">
+
+            {/* Force Offline Mode */}
+            <SettingRow
+              icon={WifiOff}
+              title={t.forceOffline || "Force Offline Mode"}
+              subtitle={t.forceOfflineDesc || "Simulate offline behavior"}
+              action={
+                <ToggleSwitch
+                  enabled={forceOffline}
+                  onToggle={() => {
+                    const newVal = !forceOffline;
+                    setForceOffline(newVal);
+                    localStorage.setItem('agro_force_offline', String(newVal));
+                    // Trigger a reload or state update to apply immediately if needed
+                    // For now, simpler to just set LS and let components react or require reload
+                    toast.success(newVal ? "Offline Mode Enabled" : "Online Mode Restored");
+                    // Dispatch event for instant update
+                    window.dispatchEvent(new Event('offline-mode-change'));
+                  }}
+                />
+              }
+            />
+
+            <div className="w-full h-px bg-border/50" />
+
+            {/* Auto Save Data */}
+            <SettingRow
+              icon={DownloadCloud}
+              title={t.autoSave || "Auto-Save Data"}
+              subtitle={t.autoSaveDesc || "Sync data on app launch"}
+              action={
+                <ToggleSwitch
+                  enabled={autoSave}
+                  onToggle={() => handleToggleInternal(autoSave, setAutoSave, "agro_auto_save", "Auto-Save settings updated")}
+                />
+              }
+            />
+
+            <div className="w-full h-px bg-border/50" />
+
+            {/* Manual Sync */}
+            <SettingRow
+              icon={RefreshCw}
+              title={t.syncNow || "Sync Data Now"}
+              subtitle={t.syncDesc || "Manually save local data"}
+              onClick={async () => {
+                toast.info("Syncing data...");
+                await syncService.syncAll();
+                toast.success("Data synced successfully");
+              }}
+            />
+
+            <div className="w-full h-px bg-border/50" />
 
             <SettingRow
               icon={Zap}
@@ -364,7 +446,7 @@ export function SettingsScreen({
             <SettingRow
               icon={HardDrive}
               title={t.clearCache}
-              subtitle={t.cacheSize}
+              subtitle={storageUsage || t.cacheSize}
               onClick={handleClearCache}
             />
 

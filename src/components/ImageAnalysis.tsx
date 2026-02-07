@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2, Search } from "lucide-react";
+import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2, Search, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
@@ -33,6 +33,8 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
   const [isCameraActive, setIsCameraActive] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isHindi = language === "hi";
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isTranslated, setIsTranslated] = useState(false);
 
   const t = getTranslation('image', language);
   const tCommon = getTranslation('common', language);
@@ -174,21 +176,45 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
     if (!result || !image) return;
 
     const newItem = {
+      // English
       diseaseName: result.disease_name,
-      diseaseNameHi: result.disease_name_hindi,
       cropType: result.crop_identified || "Unknown",
-      cropTypeHi: result.crop_identified || "अज्ञात",
+      summary: result.description,
+      description: result.description,
+      symptoms: result.symptoms,
+      treatment: result.treatment_steps,
+      // Hindi
+      diseaseNameHi: result.disease_name_hindi,
+      cropTypeHi: result.crop_identified_hindi || result.crop_identified || "अज्ञात",
+      summaryHi: result.description_hindi,
+      descriptionHi: result.description_hindi,
+      symptomsHi: result.symptoms_hindi,
+      treatmentHi: result.treatment_steps_hindi,
+      // Tamil
+      diseaseNameTa: result.disease_name_tamil,
+      cropTypeTa: result.crop_identified_tamil,
+      summaryTa: result.description_tamil,
+      descriptionTa: result.description_tamil,
+      symptomsTa: result.symptoms_tamil,
+      treatmentTa: result.treatment_steps_tamil,
+      // Telugu
+      diseaseNameTe: result.disease_name_telugu,
+      cropTypeTe: result.crop_identified_telugu,
+      summaryTe: result.description_telugu,
+      descriptionTe: result.description_telugu,
+      symptomsTe: result.symptoms_telugu,
+      treatmentTe: result.treatment_steps_telugu,
+      // Marathi
+      diseaseNameMr: result.disease_name_marathi,
+      cropTypeMr: result.crop_identified_marathi,
+      summaryMr: result.description_marathi,
+      descriptionMr: result.description_marathi,
+      symptomsMr: result.symptoms_marathi,
+      treatmentMr: result.treatment_steps_marathi,
+      // Common
       confidence: result.confidence,
       severity: result.severity,
       thumbnail: image,
-      summary: result.description,
-      summaryHi: result.description_hindi,
-      description: result.description,
-      descriptionHi: result.description_hindi,
-      symptoms: result.symptoms,
-      symptomsHi: result.symptoms_hindi,
-      treatment: result.treatment_steps,
-      treatmentHi: result.treatment_steps_hindi,
     };
 
     const { item: savedItem, isDuplicate } = await addItem(newItem);
@@ -279,6 +305,71 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
     return titles[section]?.[language] || section;
   };
 
+  const handleTranslate = async () => {
+    if (!analysisResult || isTranslating) return;
+
+    setIsTranslating(true);
+    try {
+      // Build the content to translate
+      const contentToTranslate = {
+        disease_name: analysisResult.disease_name,
+        description: analysisResult.description,
+        symptoms: analysisResult.symptoms,
+        treatment_steps: analysisResult.treatment_steps,
+        prevention_tips: analysisResult.prevention_tips,
+        organic_options: analysisResult.organic_options
+      };
+
+      // Map language codes to names
+      const langNames: Record<string, string> = {
+        en: "English",
+        hi: "Hindi",
+        ta: "Tamil",
+        te: "Telugu",
+        mr: "Marathi"
+      };
+
+      const targetLang = langNames[language] || "English";
+
+      // Call OpenRouter API for translation
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "meta-llama/llama-3.3-70b-instruct",
+          messages: [
+            {
+              role: "user",
+              content: `Translate the following plant disease analysis to ${targetLang}. Maintain the same structure and return ONLY a JSON object with the translated content:\n\n${JSON.stringify(contentToTranslate, null, 2)}`
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) throw new Error("Translation failed");
+
+      const data = await response.json();
+      const translatedContent = JSON.parse(data.choices[0].message.content);
+
+      // Update analysis result with translated content
+      setAnalysisResult({
+        ...analysisResult,
+        ...translatedContent
+      });
+
+      setIsTranslated(true);
+      toast.success(language === "hi" ? "अनुवाद पूर्ण!" : "Translation complete!");
+    } catch (error) {
+      console.error("Translation error:", error);
+      toast.error(language === "hi" ? "अनुवाद विफल" : "Translation failed");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -290,7 +381,7 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
         </Button>
         <div className="text-center">
           <h2 className="text-headline font-bold text-foreground">{t.title}</h2>
-          <p className="text-caption text-muted-foreground">AI-Powered Analysis</p>
+          <p className="text-caption text-muted-foreground">{t.aiPowered}</p>
         </div>
         <Button
           variant="ghost"
@@ -453,10 +544,10 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
 
             <div className="text-center space-y-3">
               <h3 className="text-title font-bold text-foreground">
-                {state === "uploading" ? "Preparing Scan" : "Scanning Plant..."}
+                {state === "uploading" ? t.preparingScan : t.scanningPlant}
               </h3>
               <p className="text-subhead text-muted-foreground animate-pulse">
-                {state === "uploading" ? "Optimizing image for AI..." : "Identifying potential issues..."}
+                {state === "uploading" ? t.optimizingImage : t.identifyingIssues}
               </p>
             </div>
           </div>
@@ -494,11 +585,11 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
                 {/* Status Banner */}
                 <div className={cn(
                   "p-4 rounded-apple-lg flex items-center gap-3 shadow-apple",
-                  analysisResult.disease_name.toLowerCase() === 'healthy'
+                  (analysisResult.disease_name.toLowerCase().includes('healthy') || analysisResult.severity === 'low' || analysisResult.is_healthy)
                     ? "bg-green-wash border border-primary/20"
                     : "bg-destructive/10 border border-destructive/20"
                 )}>
-                  {analysisResult.disease_name.toLowerCase() === 'healthy' ? (
+                  {(analysisResult.disease_name.toLowerCase().includes('healthy') || analysisResult.severity === 'low' || analysisResult.is_healthy) ? (
                     <CheckCircle className="w-6 h-6 text-primary flex-shrink-0" />
                   ) : (
                     <AlertCircle className="w-6 h-6 text-destructive flex-shrink-0" />
@@ -506,9 +597,9 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
                   <div className="flex-1">
                     <p className={cn(
                       "text-headline font-black tracking-tight",
-                      analysisResult.disease_name.toLowerCase() === 'healthy' ? "text-primary" : "text-destructive"
+                      (analysisResult.disease_name.toLowerCase().includes('healthy') || analysisResult.severity === 'low' || analysisResult.is_healthy) ? "text-primary" : "text-destructive"
                     )}>
-                      {analysisResult.disease_name.toLowerCase() === 'healthy' ? t.healthy : t.diseaseDetected}
+                      {(analysisResult.disease_name.toLowerCase().includes('healthy') || analysisResult.severity === 'low' || analysisResult.is_healthy) ? t.healthy : t.diseaseDetected}
                     </p>
                     <p className="text-subhead font-bold text-muted-foreground">
                       {getContent('disease_name') as string}
@@ -635,6 +726,26 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">
+                  {language !== "en" && !isTranslated && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]"
+                      onClick={handleTranslate}
+                      disabled={isTranslating}
+                    >
+                      {isTranslating ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          {language === "hi" ? "अनु" : "..."}
+                        </>
+                      ) : (
+                        <>
+                          <Languages size={18} />
+                          {language === "hi" ? "अनुवाद" : language === "ta" ? "மொழிபெயர்" : language === "te" ? "అనువాదం" : language === "mr" ? "भाषांतर" : "Translate"}
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     className="flex-1 h-12 rounded-apple border-2 gap-2 active:scale-[0.98]"
