@@ -44,6 +44,7 @@ class TTSRequest(BaseModel):
     text: str
     language: Optional[str] = "en"
     voice: Optional[str] = "mia"  # mia, aria, sofia
+    force_edge: Optional[bool] = False
 
 class AnalyzeResponse(BaseModel):
     success: bool
@@ -229,7 +230,8 @@ async def generate_speech(request: TTSRequest):
         # Normalize language code (handle en-US, hi-IN etc.)
         lang_code = request.language.split("-")[0].lower() if request.language else "en"
         voice = request.voice or "mia"
-        audio_bytes = await tts_service.generate_audio(request.text, lang_code, voice)
+        force_edge = request.force_edge or False
+        audio_bytes = await tts_service.generate_audio(request.text, lang_code, voice, force_edge)
         if not audio_bytes:
              raise HTTPException(status_code=500, detail="TTS generation failed")
              

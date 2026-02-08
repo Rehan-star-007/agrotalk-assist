@@ -15,7 +15,7 @@ const PYTHON_TTS_URL = 'http://localhost:8000/api/tts';
  * @param {string} language - Language code (en, hi, ta, te, mr)
  * @returns {Buffer|null} - Audio buffer (mp3/wav) or null on failure
  */
-async function generateNvidiaSpeech(text, language = 'en') {
+async function generateNvidiaSpeech(text, language = 'en', forceEdge = false) {
     // Clean text for TTS (remove markdown formatting)
     const cleanText = text
         .replace(/\*\*/g, '')
@@ -29,7 +29,7 @@ async function generateNvidiaSpeech(text, language = 'en') {
         return null;
     }
 
-    console.log(`🔊 [TTS Proxy] Requesting speech for: "${cleanText.slice(0, 30)}..." (${language})`);
+    console.log(`🔊 [TTS Proxy] Requesting speech for: "${cleanText.slice(0, 30)}..." (${language}, forceEdge: ${forceEdge})`);
 
     // Add timeout to prevent hanging
     const controller = new AbortController();
@@ -44,7 +44,8 @@ async function generateNvidiaSpeech(text, language = 'en') {
             body: JSON.stringify({
                 text: cleanText.slice(0, 4000), // Max chars
                 language: language,
-                voice: 'mia' // Default voice for NVIDIA, ignored for Edge TTS
+                voice: 'mia', // Default voice for NVIDIA, ignored for Edge TTS
+                force_edge: forceEdge
             }),
             signal: controller.signal
         });

@@ -19,7 +19,7 @@ import { useLibrary } from "@/hooks/useLibrary";
 import { useChat } from "@/hooks/useChat";
 import { WeatherDashboard } from "@/components/WeatherDashboard";
 import { getTranslation } from "@/lib/translations";
-import { getTextAdvice, ConversationMessage } from "@/lib/apiClient";
+import { getTextAdvice, ConversationMessage, getNvidiaTts } from "@/lib/apiClient";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from 'react-markdown';
@@ -65,6 +65,9 @@ export default function Index() {
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttsAudio, setTtsAudio] = useState<HTMLAudioElement | null>(null);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
+  const [initialVoiceMessages, setInitialVoiceMessages] = useState<ChatMessage[]>([]);
+  const [voiceContextId, setVoiceContextId] = useState<string>("");
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -244,7 +247,7 @@ export default function Index() {
       .trim();
   };
 
-  const speakText = (text: string, messageId?: string) => {
+  const speakText = async (text: string, messageId?: string) => {
     if (isMuted) return;
     window.speechSynthesis?.cancel();
     if (ttsAudio) {
@@ -252,9 +255,45 @@ export default function Index() {
       ttsAudio.currentTime = 0;
     }
 
-    if ("speechSynthesis" in window) {
+    // 1. Try Nvidia TTS First
+    try {
       const cleanedText = cleanMarkdown(text);
-      const utterance = new SpeechSynthesisUtterance(cleanedText);
+      if (navigator.onLine) {
+        const audioBlob = await getNvidiaTts(cleanedText, language);
+        if (audioBlob) {
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+
+          audio.onended = () => {
+            setIsPlaying(false);
+            setCurrentPlayingId(null);
+            URL.revokeObjectURL(audioUrl);
+          };
+          audio.onerror = () => {
+            // Fallback to browser TTS on playback error
+            console.warn("Nvidia Audio Playback failed, falling back to edge");
+            fallbackToEdgeTTS(cleanedText, messageId);
+          };
+
+          setTtsAudio(audio);
+          setIsPlaying(true);
+          if (messageId) setCurrentPlayingId(messageId);
+
+          await audio.play();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Nvidia TTS failed, falling back to edge", e);
+    }
+
+    // 2. Fallback to Edge (Browser) TTS
+    fallbackToEdgeTTS(cleanMarkdown(text), messageId);
+  };
+
+  const fallbackToEdgeTTS = (text: string, messageId?: string) => {
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
       const langMap: Record<string, string> = {
         'en': 'en-IN', 'hi': 'hi-IN', 'ta': 'ta-IN', 'te': 'te-IN', 'mr': 'mr-IN'
       };
@@ -674,7 +713,6 @@ export default function Index() {
                           <div className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                           <div className="w-2.5 h-2.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
-                        <span className="text-sm text-muted-foreground font-medium">{tVoice.thinking}</span>
                       </div>
                     </div>
                   </div>
@@ -850,13 +888,11 @@ export default function Index() {
 
   const handleShareToChat = (analysis: any) => {
     setIsImageOpen(false);
-    setIsChatMode(true);
-    setActiveTab("home");
 
     // Get translations for the current language
     const tLib = getTranslation('library', language);
 
-    // Determine the crop name based on language - use localized for current lang
+    // Determine the crop name based on language
     const cropName = (language === 'hi' || language === 'ta' || language === 'te' || language === 'mr')
       ? (analysis.cropTypeHi || analysis.crop_identified)
       : (analysis.cropType || analysis.crop_identified);
@@ -876,10 +912,7 @@ export default function Index() {
     // Create a context summary for the AI using translations
     const contextText = `${tLib.shareSubject}: ${cropName}\n${tLib.shareCondition}: ${diseaseName}\n${tLib.shareSymptoms}: ${symptoms?.join(", ")}\n${tLib.shareTreatment}: ${treatment?.join(", ")}`;
 
-    // Intro message using translation template
-    const introMsg = tLib.shareIntro.replace('{crop}', cropName);
-
-    // Add the analysis as a system-like context message and the user intro
+    // Add the analysis as a system-like context message
     const newMessages: ChatMessage[] = [
       {
         id: `context_${Date.now()}`,
@@ -887,41 +920,27 @@ export default function Index() {
         content: `**${tLib.shareTitle}**\n\n${contextText}`,
         timestamp: new Date(),
         condition: analysis.severity
-      },
-      {
-        id: `user_intro_${Date.now() + 1}`,
-        role: 'user',
-        content: introMsg,
-        timestamp: new Date()
       }
     ];
 
-    setChatMessages(prev => [...prev, ...newMessages]);
+    setInitialVoiceMessages(newMessages);
 
-    // Update conversation history for LLM context
-    setConversationHistory(prev => [
-      ...prev,
-      { role: 'assistant' as const, content: `CONTEXT: User shared a ${analysis.cropType || analysis.crop_identified} analysis showing ${analysis.diseaseName || analysis.disease_name}. Severity: ${analysis.severity}. Details: ${analysis.description || analysis.summary}` },
-      { role: 'user' as const, content: introMsg }
-    ].slice(-10));
+    // Set a random conversation ID if not set
+    const currentConvId = `analysis_${Math.random().toString(36).substring(2, 9)}`;
+    setVoiceContextId(currentConvId);
+
+    setIsVoiceOpen(true);
 
     toast.success(getTranslation('common', language).success || "Analysis added to chat context");
 
-    // Automatically trigger AI response
-    processResponse(introMsg);
+    // We'll let VoiceInteraction handle the silent trigger via a useEffect or by passing a callback
+    // For now, we'll just open it with the context.
   };
 
   const handleMarketShare = (record: any) => {
-    setIsChatMode(true);
-    setActiveTab("home");
-
     const tMarket = getTranslation('market', language);
 
     const contextText = `${tMarket.commodity}: ${record.commodity}\n${tMarket.market}: ${record.market}\n${tMarket.variety}: ${record.variety || 'N/A'}\n${tMarket.modalPrice}: ₹${record.modal_price}\n${tMarket.priceRange}: ₹${record.min_price} - ₹${record.max_price}\n${tMarket.updated}: ${record.arrival_date}`;
-
-    const introMsg = tMarket.shareIntro
-      .replace('{commodity}', record.commodity)
-      .replace('{market}', record.market);
 
     const newMessages: ChatMessage[] = [
       {
@@ -929,25 +948,16 @@ export default function Index() {
         role: 'assistant',
         content: `**${tMarket.shareTitle}**\n\n${contextText}`,
         timestamp: new Date()
-      },
-      {
-        id: `user_intro_${Date.now() + 1}`,
-        role: 'user',
-        content: introMsg,
-        timestamp: new Date()
       }
     ];
 
-    setChatMessages(prev => [...prev, ...newMessages]);
+    setInitialVoiceMessages(newMessages);
 
-    setConversationHistory(prev => [
-      ...prev,
-      { role: 'assistant' as const, content: `CONTEXT: User shared a market price report for ${record.commodity} at ${record.market}. Price is ${record.modal_price} per quintal. Details: ${contextText}` },
-      { role: 'user' as const, content: introMsg }
-    ].slice(-10));
+    // Set a random conversation ID if not set
+    const currentConvId = `market_${Math.random().toString(36).substring(2, 9)}`;
+    setVoiceContextId(currentConvId);
 
-    // Automatically trigger AI response
-    processResponse(introMsg);
+    setIsVoiceOpen(true);
   };
 
   return (
@@ -979,13 +989,26 @@ export default function Index() {
       </main>
 
 
-      {!isChatMode && <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />}
+      {!isChatMode && <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} language={language} />}
 
       <ImageAnalysis
         isOpen={isImageOpen}
         onClose={() => { setIsImageOpen(false); refreshLibrary(); }}
         language={language}
         onShareChat={handleShareToChat}
+      />
+
+      <VoiceInteraction
+        isOpen={isVoiceOpen}
+        onClose={() => setIsVoiceOpen(false)}
+        language={language}
+        initialMessages={initialVoiceMessages}
+        initialConversationId={voiceContextId}
+        weatherContext={weatherData ? {
+          temp: weatherData.current.temperature_2m,
+          condition: weatherData.current.weather_code,
+          humidity: weatherData.current.relative_humidity_2m
+        } : undefined}
       />
     </div>
   );

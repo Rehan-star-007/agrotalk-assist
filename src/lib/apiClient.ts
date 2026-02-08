@@ -117,7 +117,8 @@ export async function transcribeAndGetAdvice(
     conversationHistory: ConversationMessage[] = [],
     useTts: boolean = true,
     conversationId?: string,
-    voice?: string
+    voice?: string,
+    forceEdge: boolean = false
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending audio to backend for transcription...');
     console.log(`   Blob: ${audioBlob.type}, ${audioBlob.size} bytes`);
@@ -127,6 +128,7 @@ export async function transcribeAndGetAdvice(
         formData.append('audio', audioBlob, 'recording.webm');
         formData.append('language', language);
         formData.append('useTts', useTts.toString());
+        formData.append('forceEdge', forceEdge.toString());
 
         if (weatherContext) {
             formData.append('weatherData', JSON.stringify(weatherContext));
@@ -204,7 +206,8 @@ export async function getTextAdvice(
     conversationHistory: ConversationMessage[] = [],
     useTts: boolean = true,
     conversationId?: string,
-    voice?: string
+    voice?: string,
+    forceEdge: boolean = false
 ): Promise<TranscribeResponse> {
     console.log('📤 Sending text to backend for inference...');
     console.log(`   History items: ${conversationHistory.length}`);
@@ -323,6 +326,7 @@ export async function getTextAdvice(
         formData.append('text', text);
         formData.append('language', language);
         formData.append('useTts', useTts.toString());
+        formData.append('forceEdge', forceEdge.toString());
 
         if (weatherContext) {
             formData.append('weatherData', JSON.stringify(weatherContext));
@@ -394,14 +398,14 @@ export async function getTextAdvice(
  * Get natural TTS audio from NVIDIA cloud
  * Returns a Blob containing the MP3 audio
  */
-export async function getNvidiaTts(text: string, language: string = 'en'): Promise<Blob | null> {
+export async function getNvidiaTts(text: string, language: string = 'en', forceEdge: boolean = false): Promise<Blob | null> {
     try {
         const response = await fetch(`${BACKEND_URL}/api/tts`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ text, language })
+            body: JSON.stringify({ text, language, forceEdge })
         });
 
         if (!response.ok) return null;

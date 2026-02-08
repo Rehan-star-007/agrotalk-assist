@@ -60,6 +60,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem("agrovoice_muted") === "true");
   const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("agrovoice_voice") || "mia");
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  const [shouldForceEdge, setShouldForceEdge] = useState(false);
   const voiceMenuRef = useRef<HTMLDivElement>(null);
 
   // Available NVIDIA voices
@@ -80,11 +81,22 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   }, [initialMessages]);
 
   useEffect(() => {
-    if (isOpen && !conversationId) {
-      // Start a new conversation session when the assistant is opened
-      const newId = `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
-      setConversationId(newId);
-      console.log(`💬 Starting new chat session: ${newId}`);
+    if (isOpen) {
+      if (!conversationId) {
+        const newId = initialConversationId || `chat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+        setConversationId(newId);
+
+        const isMarket = newId.startsWith("market");
+        const isAnalysis = newId.startsWith("analysis");
+        setShouldForceEdge(isMarket || isAnalysis);
+
+        if (isMarket || isAnalysis) {
+          const prompt = isMarket
+            ? "I've shared some market price data. Please summarize it and give me advice."
+            : "I've shared a crop analysis. What should I do next?";
+          processResponse(prompt, true, true);
+        }
+      }
     }
   }, [isOpen]);
 
@@ -118,17 +130,18 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   const recordedMimeTypeRef = useRef<string>("audio/webm");
   const recognitionRef = useRef<any>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const accumulatedTranscriptRef = useRef("");
 
   const t = getTranslation('voice', language);
   const tCommon = getTranslation('common', language);
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom when new messages arrive or state changes (processing)
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [chatMessages]);
+  }, [chatMessages, state]);
 
   useEffect(() => {
     if (isOpen && weatherContext) {
@@ -165,13 +178,13 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     setChatMessages(prev => [...prev, newMsg]);
   };
 
-  const processResponse = async (text: string) => {
+  const processResponse = async (text: string, isSilent: boolean = false, forceEdge: boolean = false) => {
     // Add user message to chat
-    addMessage('user', text);
+    if (!isSilent) addMessage('user', text);
     setState("processing");
 
     try {
-      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId, selectedVoice);
+      const result = await getTextAdvice(text, language, weatherContext, conversationHistory, true, conversationId, selectedVoice, forceEdge);
 
       if (result.success && result.advisory) {
         setTranscript(result.transcript || text);
@@ -190,7 +203,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
 
         // Play TTS
         setTimeout(() => {
-          playResponse(result.advisory!.recommendation, result.audio);
+          playResponse(result.advisory!.recommendation, result.audio, forceEdge);
         }, 300);
       } else {
         setErrorMessage(result.error || "Failed");
@@ -402,7 +415,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
   };
 
   // Enhanced TTS with NVIDIA Cloud Backend
-  const speakText = async (text: string, messageId?: string, force: boolean = false) => {
+  const speakText = async (text: string, messageId?: string, force: boolean = false, forceEdge: boolean = false) => {
     if (isMuted && !force) return;
 
     // If forcing (e.g. manual play click), unmute automatically
@@ -421,7 +434,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       if (messageId) setCurrentPlayingId(messageId);
 
       const cleanedText = cleanMarkdown(text);
-      const audioBlob = await getNvidiaTts(cleanedText, language);
+      const audioBlob = await getNvidiaTts(cleanedText, language, forceEdge);
 
       if (!audioBlob) {
         console.warn("⚠️ NVIDIA TTS failed, no fallback enabled as per request.");
@@ -459,7 +472,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
     }
   };
 
-  const playResponse = (text: string, audioBase64?: string) => {
+  const playResponse = (text: string, audioBase64?: string, forceEdge: boolean = false) => {
     if (isMuted) {
       console.log('🔇 Muted: Skipping audio playback');
       return;
@@ -483,7 +496,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
         setCurrentPlayingId(null);
       });
     } else {
-      speakText(text);
+      speakText(text, undefined, false, forceEdge);
     }
   };
 
@@ -496,7 +509,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
       setIsPlaying(false);
       setCurrentPlayingId(null);
     } else {
-      speakText(content, msgId, true);
+      speakText(content, msgId, true, shouldForceEdge);
     }
   };
 
@@ -763,7 +776,6 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
                       <div className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <div className="w-2.5 h-2.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-sm text-muted-foreground font-medium">{t.thinking}</span>
                   </div>
                 </div>
               </div>
@@ -793,6 +805,7 @@ export function VoiceInteraction({ isOpen, onClose, language, isIntegrated, weat
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 

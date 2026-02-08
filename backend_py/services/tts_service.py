@@ -1,69 +1,35 @@
 import os
 import asyncio
-import tempfile
-import httpx
-from pathlib import Path
 from dotenv import load_dotenv
+
+# Import the NvidiaTTSService which now handles simple TTS + Nvidia High Quality
+from .nvidia_tts import NvidiaTTSService
 
 load_dotenv()
 
-# Try to import edge-tts
-try:
-    import edge_tts
-    EDGE_TTS_AVAILABLE = True
-except ImportError:
-    EDGE_TTS_AVAILABLE = False
-
-class TTSService:
+class TTSService(NvidiaTTSService):
+    """
+    Wrapper for NvidiaTTSService to maintain backward compatibility.
+    This ensures that anywhere TTSService is used, we now get the benefit
+    of Nvidia TTS prioritization (for English) with Edge TTS fallback.
+    """
     def __init__(self):
-        print("🟢 Edge TTS Service initialized.")
+        super().__init__()
+        print("🟢 Unified TTS Service initialized (Nvidia priority with Edge fallback).")
 
-        # Mapping languages to specific high-quality Edge voices
-        self.EDGE_VOICE_MAP = {
-            "en": "en-US-ChristopherNeural",
-            "hi": "hi-IN-MadhurNeural",
-            "ta": "ta-IN-ValluvarNeural",
-            "te": "te-IN-MohanNeural",
-            "mr": "mr-IN-ManoharNeural"
-        }
-        
-    async def generate_audio(self, text: str, language: str = "en", gender: str = "male") -> bytes:
+    async def generate_audio(self, text: str, language: str = "en", gender: str = "female") -> bytes:
         """
-        Generate MP3 audio bytes using Edge TTS.
-        """
-        if not EDGE_TTS_AVAILABLE:
-            print("❌ Edge-TTS not installed.")
-            return None
-
-        # Select voice
-        voice = self.EDGE_VOICE_MAP.get(language, "en-US-ChristopherNeural")
+        Generate audio bytes.
         
-        # Simple gender override if needed
-        if gender == "female":
-            female_voices = {
-                "en": "en-US-AriaNeural",
-                "hi": "hi-IN-SwaraNeural",
-                "ta": "ta-IN-PallaviNeural",
-                "te": "te-IN-ShrutiNeural",
-                "mr": "mr-IN-AarohiNeural"
-            }
-            voice = female_voices.get(language, voice)
-
-        print(f"🎤 [EDGE] Generating: '{text[:30]}...' ({language}, {voice})")
-
-        try:
-            communicate = edge_tts.Communicate(text, voice)
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
-                tmp_path = tmp_file.name
-            
-            await communicate.save(tmp_path)
-            
-            with open(tmp_path, "rb") as f:
-                audio_data = f.read()
-            
-            os.unlink(tmp_path)
-            return audio_data
-
-        except Exception as e:
-            print(f"❌ Edge TTS Error: {e}")
-            return None
+        Args:
+            text: Text to synthesize.
+            language: Language code (e.g., "en", "en-US", "hi").
+            gender: Voice gender preference (mapped to voice names in parent class).
+        """
+        # Map gender/generic voice requests to Nvidia personalities if strict mapping is needed,
+        # otherwise NvidiaTTSService defaults to "mia" (female).
+        voice = "mia" # Default Nvidia voice
+        
+        # Call the parent class's generate_audio
+        # Parent signature: generate_audio(self, text: str, language: str = "en", voice: str = "mia")
+        return await super().generate_audio(text, language, voice)

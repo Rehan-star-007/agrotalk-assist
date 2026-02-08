@@ -87,6 +87,7 @@ router.post('/', uploadFields, async (req, res) => {
         // 5. Generate Natural TTS Audio (if OpenAI key is available)
         let audioBase64 = null;
         const useTts = req.body.useTts === 'true';
+        const forceEdge = req.body.forceEdge === 'true';
 
         if (useTts) {
             let audioBuffer = null;
@@ -94,7 +95,7 @@ router.post('/', uploadFields, async (req, res) => {
             // 1. Try NVIDIA TTS (New)
             if (process.env.NVIDIA_API_KEY) {
                 console.log('🔊 Attempting NVIDIA TTS...');
-                audioBuffer = await generateNvidiaSpeech(advisory.recommendation, language);
+                audioBuffer = await generateNvidiaSpeech(advisory.recommendation, language, forceEdge);
             }
 
             // 2. Fallback to existing TTS service (Python/Edge-TTS)

@@ -1,20 +1,24 @@
 import { Home, Camera, BookOpen, Settings, User, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getTranslation } from "@/lib/translations";
 
 export type NavTab = "home" | "analyze" | "library" | "settings" | "assistant" | "market";
 
 interface BottomNavigationProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
+  language?: string;
 }
 
-export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationProps) {
+export function BottomNavigation({ activeTab, onTabChange, language = 'en' }: BottomNavigationProps) {
+  const t = getTranslation('nav', language);
+
   const tabs: { id: NavTab; icon: typeof Home; label: string }[] = [
-    { id: "home", icon: Home, label: "Home" },
-    { id: "market", icon: ShoppingBag, label: "Market" },
-    { id: "analyze", icon: Camera, label: "Analyze" },
-    { id: "library", icon: BookOpen, label: "Library" },
-    { id: "settings", icon: Settings, label: "Settings" },
+    { id: "home", icon: Home, label: t.home },
+    { id: "market", icon: ShoppingBag, label: t.market },
+    { id: "analyze", icon: Camera, label: t.analyze },
+    { id: "library", icon: BookOpen, label: t.library },
+    { id: "settings", icon: Settings, label: t.settings },
   ];
 
 

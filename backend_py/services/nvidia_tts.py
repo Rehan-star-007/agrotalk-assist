@@ -31,7 +31,7 @@ class NvidiaTTSService:
         
         # NVIDIA Magpie Multilingual - Testing shows ONLY English is available
         # All other languages (Indian, European, Asian) fall back to Edge TTS
-        self.NVIDIA_SUPPORTED_LANGS = {"en"}
+        self.NVIDIA_SUPPORTED_LANG_PREFIX = "en"
         
         # Language code to NVIDIA locale mapping (only English confirmed working)
         self.NVIDIA_LANG_CODE_MAP = {
@@ -161,7 +161,7 @@ class NvidiaTTSService:
             print(f"❌ NVIDIA TTS Error: {error_msg}")
             return None
 
-    async def generate_audio(self, text: str, language: str = "en", voice: str = "mia") -> Optional[bytes]:
+    async def generate_audio(self, text: str, language: str = "en", voice: str = "mia", force_edge: bool = False) -> Optional[bytes]:
         """
         Generates audio using NVIDIA TTS for supported languages (Western),
         or falls back to Edge TTS for unsupported languages (Indian).
@@ -170,14 +170,20 @@ class NvidiaTTSService:
             text: Text to synthesize
             language: Language code (en, hi, ta, te, mr, es, fr, de, it, pt, zh, vi)
             voice: Voice personality (mia, aria, sofia) - only for NVIDIA
+            force_edge: If True, bypass NVIDIA and use Edge TTS directly
             
         Returns:
             Audio bytes (WAV for NVIDIA, MP3 for Edge TTS), or None on failure.
         """
         lang = language.lower()
         
-        # Check if language is supported by NVIDIA Magpie
-        if lang in self.NVIDIA_SUPPORTED_LANGS and self.api_key and RIVA_AVAILABLE:
+        # Check if language is supported by NVIDIA Magpie (English only)
+        is_nvidia_supported = lang.startswith(self.NVIDIA_SUPPORTED_LANG_PREFIX)
+        
+        # Priotize NVIDIA for English even if force_edge is suggested (latest user preference)
+        should_try_nvidia = is_nvidia_supported and self.api_key and RIVA_AVAILABLE
+        
+        if should_try_nvidia and (not force_edge or lang.startswith("en")):
             # Use NVIDIA TTS for supported Western languages
             audio = await self._generate_nvidia_audio(text, lang, voice)
             if audio:
@@ -185,8 +191,11 @@ class NvidiaTTSService:
             # Fall back to Edge if NVIDIA fails
             print("⚠️ NVIDIA TTS failed. Falling back to Edge TTS...")
         else:
-            # Language not supported by NVIDIA (e.g., Hindi, Tamil, Telugu, Marathi)
-            print(f"ℹ️ Language '{lang}' not supported by NVIDIA. Using Edge TTS...")
+            if force_edge and not lang.startswith("en"):
+                print(f"ℹ️ Forcing Edge TTS for language '{lang}' as requested...")
+            elif not is_nvidia_supported:
+                # Language not supported by NVIDIA (e.g., Hindi, Tamil, Telugu, Marathi)
+                print(f"ℹ️ Language '{lang}' not supported by NVIDIA. Using Edge TTS...")
         
         # Fallback to Edge TTS
         return await self._generate_edge_audio(text, lang)

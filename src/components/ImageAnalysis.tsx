@@ -3,6 +3,7 @@ import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2,
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { analyzeImage, DiseaseAnalysis } from "@/lib/visionAnalysis";
+import { getNvidiaTts } from "@/lib/apiClient";
 import { useLibrary } from "@/hooks/useLibrary";
 import { toast } from "sonner";
 import { getTranslation, type SupportedLanguage } from "@/lib/translations";
@@ -240,16 +241,37 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const speakAdvice = () => {
+  const speakAdvice = async () => {
     if (isMuted) {
       toast.info(language === 'hi' ? "आवाज बंद है। सुनने के लिए अनम्यूट करें।" : "Audio is muted. Unmute to hear advice.");
       return;
     }
-    if (analysisResult && "speechSynthesis" in window) {
-      // Use localized content for speech
-      const name = getContent('disease_name') as string;
-      const desc = getContent('description') as string;
-      const text = `${name}. ${desc}`;
+
+    if (!analysisResult) return;
+
+    // Use localized content for speech
+    const name = getContent('disease_name') as string;
+    const desc = getContent('description') as string;
+    const text = `${name}. ${desc}`;
+
+    // 1. Try Nvidia TTS First
+    try {
+      if (navigator.onLine) {
+        const audioBlob = await getNvidiaTts(text, language, true);
+        if (audioBlob) {
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.onended = () => URL.revokeObjectURL(audioUrl);
+          await audio.play();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Nvidia TTS failed, falling back to edge", e);
+    }
+
+    // 2. Fallback to Edge
+    if ("speechSynthesis" in window) {
       const utterance = new SpeechSynthesisUtterance(text);
 
       // Map app language codes to TTS codes
@@ -267,6 +289,7 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
       };
 
       utterance.lang = langMap[language] || 'en-US';
+      window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -604,6 +627,17 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
                     <p className="text-subhead font-bold text-muted-foreground">
                       {getContent('disease_name') as string}
                     </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        speakAdvice();
+                      }}
+                      className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-primary/80 hover:text-primary transition-colors"
+                    >
+                      <Volume2 size={12} className="fill-current" />
+                      {t.hearAdvice || (language === 'hi' ? "सलाह सुनें" : "Listen")}
+                    </button>
+
                   </div>
                   <Button
                     variant="ghost"

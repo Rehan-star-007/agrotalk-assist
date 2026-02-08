@@ -1,7 +1,13 @@
 import { WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { getTranslation } from "@/lib/translations";
 
-export function OfflineBanner() {
+interface OfflineBannerProps {
+    language?: string;
+}
+
+export function OfflineBanner({ language = 'en' }: OfflineBannerProps) {
+    const t = getTranslation('offline', language);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     useEffect(() => {
@@ -29,7 +35,7 @@ export function OfflineBanner() {
     return (
         <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm text-center font-medium animate-in slide-in-from-top flex items-center justify-center gap-2">
             <WifiOff size={14} />
-            <span>You are currently offline. Using local data.</span>
+            <span>{t.title}. {t.message}</span>
         </div>
     );
 }

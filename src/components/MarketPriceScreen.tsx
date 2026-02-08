@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp, X, Filter, Zap } from 'lucide-react';
+import { Search, MapPin, TrendingUp, Calendar, ArrowRight, RefreshCw, ShoppingBag, Sparkles, Brain, Loader2, ChevronDown, ChevronUp, X, Filter, Zap, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTranslation } from '@/lib/translations';
+import { getNvidiaTts } from '@/lib/apiClient';
 import { mandiService, type MandiPriceRecord } from '@/services/mandiService';
 
 interface MarketPriceScreenProps {
@@ -409,7 +410,56 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                                             <div className="flex items-center gap-4">
                                                 <div className="text-center">
                                                     <p className="text-[10px] text-muted-foreground uppercase">{t.variety}</p>
-                                                    <p className="text-caption font-bold">{record.variety}</p>
+                                                    <p className="text-caption font-bold">
+                                                        {(() => {
+                                                            const variety = record.variety?.trim() || '';
+                                                            const commodity = record.commodity?.trim().toLowerCase() || '';
+
+                                                            // If variety has a real value, use it
+                                                            if (variety &&
+                                                                variety.toLowerCase() !== commodity &&
+                                                                variety.toLowerCase() !== 'other' &&
+                                                                variety.toLowerCase() !== 'others') {
+                                                                return variety;
+                                                            }
+
+                                                            // Categorize by commodity type
+                                                            const fruits = ['grape', 'grapes', 'apple', 'banana', 'mango', 'orange', 'papaya', 'pomegranate', 'watermelon', 'guava', 'lemon', 'lime', 'pineapple', 'coconut', 'jackfruit', 'litchi', 'custard apple', 'sapota', 'kiwi', 'strawberry', 'fig', 'dates', 'mousambi', 'sweet orange'];
+                                                            const vegetables = ['brinjal', 'tomato', 'potato', 'onion', 'cabbage', 'cauliflower', 'carrot', 'beans', 'peas', 'ladyfinger', 'okra', 'bhindi', 'capsicum', 'cucumber', 'bottle gourd', 'bitter gourd', 'pumpkin', 'spinach', 'drumstick', 'green chilli', 'ginger', 'garlic', 'radish', 'beetroot', 'coriander', 'methi', 'palak', 'ridge gourd', 'ash gourd', 'snake gourd', 'ivy gourd', 'pointed gourd', 'cluster beans', 'french beans', 'tinda', 'parwal', 'colocasia', 'yam', 'raw banana', 'green banana', 'mushroom', 'sweet potato', 'lettuce', 'broccoli', 'baby corn'];
+                                                            const grains = ['wheat', 'rice', 'paddy', 'maize', 'corn', 'bajra', 'jowar', 'sorghum', 'ragi', 'barley', 'oats', 'millets'];
+                                                            const pulses = ['arhar', 'toor', 'tur', 'chana', 'moong', 'urad', 'masoor', 'lentil', 'gram', 'bengal gram', 'black gram', 'green gram', 'red gram', 'horse gram', 'cowpea', 'rajma', 'soyabean', 'soybean'];
+                                                            const spices = ['chilli', 'turmeric', 'coriander seed', 'cumin', 'jeera', 'fennel', 'fenugreek', 'mustard', 'pepper', 'cardamom', 'cloves', 'cinnamon', 'nutmeg', 'tamarind', 'dry chillies', 'red chilli'];
+                                                            const oilseeds = ['groundnut', 'sunflower', 'sesame', 'til', 'castor', 'mustard seed', 'coconut oil', 'copra', 'linseed', 'safflower', 'niger'];
+                                                            const cashCrops = ['cotton', 'sugarcane', 'jute', 'tobacco', 'tea', 'coffee', 'rubber'];
+                                                            const flowers = ['marigold', 'rose', 'jasmine', 'chrysanthemum', 'tuberose', 'lily', 'gladiolus'];
+
+                                                            const getCategoryLabel = (cat: string) => {
+                                                                const labels: Record<string, Record<string, string>> = {
+                                                                    fruit: { en: 'Fruit', hi: 'फल', ta: 'பழம்', te: 'పండు', mr: 'फळ' },
+                                                                    vegetable: { en: 'Vegetable', hi: 'सब्जी', ta: 'காய்கறி', te: 'కూరగాయ', mr: 'भाजी' },
+                                                                    grain: { en: 'Grain', hi: 'अनाज', ta: 'தானியம்', te: 'ధాన్యం', mr: 'धान्य' },
+                                                                    pulse: { en: 'Pulse', hi: 'दाल', ta: 'பருப்பு', te: 'పప్పు', mr: 'डाळ' },
+                                                                    spice: { en: 'Spice', hi: 'मसाला', ta: 'மசாலா', te: 'సుగంధ ద్రవ్యం', mr: 'मसाला' },
+                                                                    oilseed: { en: 'Oilseed', hi: 'तिलहन', ta: 'எண்ணெய் வித்து', te: 'నూనె గింజ', mr: 'तेलबिया' },
+                                                                    cashCrop: { en: 'Cash Crop', hi: 'नकदी फसल', ta: 'பண பயிர்', te: 'వాణిజ్య పంట', mr: 'रोख पीक' },
+                                                                    flower: { en: 'Flower', hi: 'फूल', ta: 'மலர்', te: 'పువ్వు', mr: 'फूल' },
+                                                                    standard: { en: 'Standard', hi: 'साधारण', ta: 'நிலையான', te: 'ప్రామాణిక', mr: 'मानक' }
+                                                                };
+                                                                return labels[cat]?.[language] || labels[cat]?.en || labels.standard[language];
+                                                            };
+
+                                                            if (fruits.some(f => commodity.includes(f))) return getCategoryLabel('fruit');
+                                                            if (vegetables.some(v => commodity.includes(v))) return getCategoryLabel('vegetable');
+                                                            if (grains.some(g => commodity.includes(g))) return getCategoryLabel('grain');
+                                                            if (pulses.some(p => commodity.includes(p))) return getCategoryLabel('pulse');
+                                                            if (spices.some(s => commodity.includes(s))) return getCategoryLabel('spice');
+                                                            if (oilseeds.some(o => commodity.includes(o))) return getCategoryLabel('oilseed');
+                                                            if (cashCrops.some(c => commodity.includes(c))) return getCategoryLabel('cashCrop');
+                                                            if (flowers.some(f => commodity.includes(f))) return getCategoryLabel('flower');
+
+                                                            return getCategoryLabel('standard');
+                                                        })()}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <button
@@ -450,7 +500,39 @@ export const MarketPriceScreen: React.FC<MarketPriceScreenProps> = ({ language, 
                                                     <p className="text-body text-foreground leading-relaxed">
                                                         {analysis}
                                                     </p>
-                                                    <div className="mt-3 flex justify-end">
+                                                    <div className="mt-3 flex justify-between items-center">
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+
+                                                                // 1. Try Nvidia TTS
+                                                                try {
+                                                                    if (navigator.onLine) {
+                                                                        const audioBlob = await getNvidiaTts(analysis, language, true);
+                                                                        if (audioBlob) {
+                                                                            const audioUrl = URL.createObjectURL(audioBlob);
+                                                                            const audio = new Audio(audioUrl);
+                                                                            audio.onended = () => URL.revokeObjectURL(audioUrl);
+                                                                            await audio.play();
+                                                                            return;
+                                                                        }
+                                                                    }
+                                                                } catch (err) {
+                                                                    console.warn("Nvidia TTS failed, fallback to edge", err);
+                                                                }
+
+                                                                // 2. Fallback to Edge
+                                                                const utterance = new SpeechSynthesisUtterance(analysis);
+                                                                const langMap: Record<string, string> = { 'en': 'en-IN', 'hi': 'hi-IN', 'ta': 'ta-IN', 'te': 'te-IN', 'mr': 'mr-IN' };
+                                                                utterance.lang = langMap[language] || 'en-IN';
+                                                                window.speechSynthesis.cancel();
+                                                                window.speechSynthesis.speak(utterance);
+                                                            }}
+                                                            className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                                        >
+                                                            <Volume2 size={14} />
+                                                            {language === 'hi' ? "सुनें" : "Listen"}
+                                                        </button>
                                                         <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/50 px-2 py-0.5 rounded-full border border-border/50">
                                                             <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
                                                             <span>AI-Powered Insights</span>
