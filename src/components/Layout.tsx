@@ -33,7 +33,7 @@ export function Layout({ children }: LayoutProps) {
 
     const handleTabChange = (tab: NavTab) => {
         if (tab === 'analyze') {
-            setIsImageOpen(true);
+            navigate('/bird-detector');
         } else {
             const routes: Record<NavTab, string> = {
                 home: '/',

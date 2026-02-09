@@ -10,6 +10,7 @@ import MarketPage from "./pages/MarketPage";
 import LibraryPage from "./pages/LibraryPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import BirdDetectorPage from "./pages/BirdDetectorPage";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="/bird-detector" element={<BirdDetectorPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>

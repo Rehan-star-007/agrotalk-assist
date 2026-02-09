@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Camera, X, Volume2, VolumeX, Mic, ChevronDown, ArrowRight, User, Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -61,7 +62,9 @@ export default function HomePage() {
     const recognitionRef = useRef<any>(null);
     const accumulatedTranscriptRef = useRef('');
     const voiceMenuRef = useRef<HTMLDivElement>(null);
+
     const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+    const navigate = useNavigate();
 
     const t = getTranslation('home', language);
     const tVoice = getTranslation('voice', language);
@@ -675,7 +678,7 @@ export default function HomePage() {
 
                 {/* Camera Button */}
                 <button
-                    onClick={() => setIsImageOpen(true)}
+                    onClick={() => navigate('/bird-detector')}
                     className="mt-6 w-full inline-flex items-center justify-center gap-3 px-6 py-4 rounded-full bg-card border border-border shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5 transition-all active:scale-95"
                 >
                     <Camera size={22} className="text-primary" />
