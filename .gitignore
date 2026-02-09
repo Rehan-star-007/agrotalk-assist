@@ -54,3 +54,4 @@ test_audio/
 backend/data/*
 !backend/data/agricultural_knowledge.json
 backend/uploads/*
+backend_py/uploads/

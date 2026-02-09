@@ -28,16 +28,34 @@ export default function BirdDetectorPage() {
     }
     const [alerts, setAlerts] = useState<Alert[]>([]);
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (file) {
-            setVideoFile(file);
-            // Simulate upload/processing delay
-            setIsUploading(true);
-            setTimeout(() => {
-                setIsUploading(false);
-                setIsConnected(true); // Pretend backend is ready to stream processed video
-            }, 1500);
+        if (!file) return;
+
+        setVideoFile(file);
+        setIsUploading(true);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('http://localhost:8000/api/bird/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Upload failed');
+            }
+
+            setIsConnected(true);
+        } catch (error) {
+            console.error('Upload error:', error);
+            setVideoFile(null);
+            alert('Failed to upload video. Make sure the backend is running.');
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -74,13 +92,18 @@ export default function BirdDetectorPage() {
 
                     // Add to alert log if new detection (simple throttle)
                     if (status !== 'detected') {
+                        // Use real thumbnail from backend if available
+                        const thumbnailSrc = data.thumbnail
+                            ? `data:image/jpeg;base64,${data.thumbnail}`
+                            : "https://images.unsplash.com/photo-1552728089-57bdde30ebd1?q=80&w=200&auto=format&fit=crop";
+
                         setAlerts(prev => [
                             {
                                 id: Date.now().toString(),
                                 timestamp: new Date().toLocaleTimeString(),
-                                thumbnail: "https://images.unsplash.com/photo-1552728089-57bdde30ebd1?q=80&w=200&auto=format&fit=crop", // Placeholder
+                                thumbnail: thumbnailSrc,
                                 details: "Bird Detected",
-                                confidence: 0.94 + (Math.random() * 0.05)
+                                confidence: data.confidence || 0.95
                             },
                             ...prev
                         ].slice(0, 50)); // Keep last 50
@@ -101,27 +124,64 @@ export default function BirdDetectorPage() {
         return () => clearInterval(interval);
     }, [isConnected, isMuted, mode]);
 
-    // Simple beep sound using AudioContext
+    // Advanced bird-scaring siren using AudioContext
+    // Uses multiple frequency sweeps that are known to scare birds
     const playBuzzer = () => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         const ctx = audioContextRef.current;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        const currentTime = ctx.currentTime;
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        // Create a multi-tone bird deterrent siren
+        // Birds are scared by sudden, loud, varying high-frequency sounds
 
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, ctx.currentTime); // High pitch notification
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+        // Oscillator 1: High-frequency sweep (hawk-like screech)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(2000, currentTime);
+        osc1.frequency.exponentialRampToValueAtTime(4000, currentTime + 0.15);
+        osc1.frequency.exponentialRampToValueAtTime(1500, currentTime + 0.3);
+        osc1.frequency.exponentialRampToValueAtTime(3500, currentTime + 0.5);
+        gain1.gain.setValueAtTime(0.4, currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.55);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
 
-        gain.gain.setValueAtTime(0.5, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+        // Oscillator 2: Low pulse (startling bass)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(150, currentTime);
+        osc2.frequency.exponentialRampToValueAtTime(80, currentTime + 0.2);
+        gain2.gain.setValueAtTime(0.3, currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.25);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
 
-        osc.start();
-        osc.stop(ctx.currentTime + 0.1);
+        // Oscillator 3: Warbling high tone (predator call)
+        const osc3 = ctx.createOscillator();
+        const gain3 = ctx.createGain();
+        osc3.type = 'sine';
+        osc3.frequency.setValueAtTime(3000, currentTime + 0.1);
+        osc3.frequency.exponentialRampToValueAtTime(5000, currentTime + 0.2);
+        osc3.frequency.exponentialRampToValueAtTime(2500, currentTime + 0.35);
+        osc3.frequency.exponentialRampToValueAtTime(4500, currentTime + 0.5);
+        gain3.gain.setValueAtTime(0, currentTime);
+        gain3.gain.linearRampToValueAtTime(0.35, currentTime + 0.1);
+        gain3.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.55);
+        osc3.connect(gain3);
+        gain3.connect(ctx.destination);
+
+        // Start all oscillators
+        osc1.start(currentTime);
+        osc2.start(currentTime);
+        osc3.start(currentTime);
+
+        osc1.stop(currentTime + 0.6);
+        osc2.stop(currentTime + 0.3);
+        osc3.stop(currentTime + 0.6);
     };
 
     return (
@@ -266,7 +326,17 @@ export default function BirdDetectorPage() {
                                 {/* Reset / Close Button for Video Mode */}
                                 {videoFile && !isUploading && (
                                     <button
-                                        onClick={() => { setVideoFile(null); setIsConnected(false); }}
+                                        onClick={async () => {
+                                            try {
+                                                await fetch('http://localhost:8000/api/bird/reset', { method: 'POST' });
+                                            } catch (e) {
+                                                console.log('Reset call failed:', e);
+                                            }
+                                            setVideoFile(null);
+                                            setIsConnected(false);
+                                            setStatus('safe');
+                                            setAlerts([]);
+                                        }}
                                         className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white/70 hover:text-white hover:bg-black/80 backdrop-blur-md transition-all z-10"
                                     >
                                         <Search size={16} className="rotate-45" /> {/* Close Icon style */}

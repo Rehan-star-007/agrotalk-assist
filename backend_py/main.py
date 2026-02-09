@@ -14,6 +14,7 @@ from utils.image_processing import decode_base64_image, preprocess_image
 from utils.visualization import process_and_visualize
 from services.nvidia_tts import NvidiaTTSService
 from services.nvidia_vision import NvidiaVisionService
+from bird_server import router as bird_router
 import io
 import base64
 
@@ -30,6 +31,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Bird Detection routes
+app.include_router(bird_router)
 
 detector: Optional[PlantDiseaseDetector] = None
 nvidia_service: Optional[NvidiaVisionService] = None
