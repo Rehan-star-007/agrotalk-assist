@@ -4,11 +4,13 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 
+import { ImageAnalysis } from '@/components/ImageAnalysis';
+
 type Mode = 'bird' | 'plant' | 'live_plant';
 type SubMode = 'camera' | 'search';
 
 export default function BirdDetectorPage() {
-    const { setIsImageOpen } = useApp();
+    const { language } = useApp();
     const [mode, setMode] = useState<Mode>('bird');
     const [subMode, setSubMode] = useState<SubMode>('camera');
     const [isMuted, setIsMuted] = useState(false);
@@ -407,39 +409,14 @@ export default function BirdDetectorPage() {
                         </div>
                     </div>
                 ) : (
-                    /* Plant Photo Scanner UI (EXISTING) */
-                    <div className="max-w-lg mx-auto flex flex-col items-center justify-center gap-8 py-10 animate-in fade-in zoom-in-95 duration-300">
-                        {/* Frame Area */}
-                        <div className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-primary/30 bg-muted/20 flex flex-col items-center justify-center gap-4 relative overflow-hidden group hover:border-primary/50 transition-colors">
-                            <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center text-primary mb-2">
-                                <Camera size={32} strokeWidth={1.5} />
-                            </div>
-                            <div className="text-center">
-                                <h3 className="text-lg font-semibold text-foreground">Position leaf in frame</h3>
-                                <p className="text-sm text-muted-foreground mt-1">JPG, PNG (max 10MB)</p>
-                            </div>
-
-                            {/* Scanning Animation (Cosmetic) */}
-                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent -translate-y-full group-hover:translate-y-full transition-transform duration-1000 ease-in-out" />
-                        </div>
-
-                        {/* Actions */}
-                        <div className="w-full space-y-3">
-                            <button
-                                onClick={() => setIsImageOpen(true)}
-                                className="w-full py-4 rounded-xl bg-[#76b900] hover:bg-[#5da600] text-white font-semibold shadow-lg shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Camera size={20} />
-                                Take Photo
-                            </button>
-                            <button
-                                onClick={() => setIsImageOpen(true)}
-                                className="w-full py-4 rounded-xl bg-white border border-border hover:bg-muted font-semibold text-foreground shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Upload size={20} className="text-muted-foreground" />
-                                Upload from Gallery
-                            </button>
-                        </div>
+                    /* Plant Photo Scanner UI (INLINE) */
+                    <div className="w-full max-w-xl mx-auto py-6 animate-in fade-in zoom-in-95 duration-300 min-h-[600px]">
+                        <ImageAnalysis
+                            isOpen={true}
+                            onClose={() => { }}
+                            language={language}
+                            variant="inline"
+                        />
                     </div>
                 )}
 

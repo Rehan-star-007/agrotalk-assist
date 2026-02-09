@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Camera, Upload, Volume2, VolumeX, CheckCircle, AlertCircle, Loader2, Sparkles, RotateCcw, BookmarkPlus, Share2, Search, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -15,9 +15,11 @@ interface ImageAnalysisProps {
   onClose: () => void;
   language: string;
   onShareChat?: (analysis: DiseaseAnalysis) => void;
+  variant?: "overlay" | "inline";
 }
 
-export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageAnalysisProps) {
+export function ImageAnalysis({ isOpen, onClose, language, onShareChat, variant = "overlay" }: ImageAnalysisProps) {
+
   const [state, setState] = useState<AnalysisState>("camera");
   const [analysisMode, setAnalysisMode] = useState<"yolo" | "nvidia">("yolo");
   const [analysisStep, setAnalysisStep] = useState<"crop" | "disease">("crop");
@@ -134,6 +136,13 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
       stopCamera();
     }
   };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   const performAnalysis = async (file: File) => {
     setState("uploading");
@@ -393,36 +402,44 @@ export function ImageAnalysis({ isOpen, onClose, language, onShareChat }: ImageA
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && variant === "overlay") return null;
+
+  const handleMutedChange = (newMuted: boolean) => {
+    setIsMuted(newMuted);
+    localStorage.setItem("agrovoice_muted", String(newMuted));
+    if (!newMuted) speakAdvice();
+    else window.speechSynthesis.cancel();
+  };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
-        <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full">
-          <X className="w-6 h-6" />
-        </Button>
-        <div className="text-center">
-          <h2 className="text-headline font-bold text-foreground">{t.title}</h2>
-          <p className="text-caption text-muted-foreground">{t.aiPowered}</p>
+    <div className={cn(
+      "bg-background flex flex-col",
+      variant === "overlay"
+        ? "fixed inset-0 z-[100] animate-in fade-in slide-in-from-bottom-4 duration-300"
+        : "w-full h-full relative"
+    )}>
+      {/* Header - Only for overlay mode */}
+      {variant === "overlay" && (
+        <div className="p-4 flex items-center justify-between border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
+          <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full">
+            <X className="w-6 h-6" />
+          </Button>
+          <div className="text-center">
+            <h2 className="text-headline font-bold text-foreground">{t.title}</h2>
+            <p className="text-caption text-muted-foreground">{t.aiPowered}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleMutedChange(!isMuted)}
+            className="rounded-full"
+          >
+            {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            const newMuted = !isMuted;
-            setIsMuted(newMuted);
-            localStorage.setItem("agrovoice_muted", String(newMuted));
-            if (!newMuted) speakAdvice();
-            else window.speechSynthesis.cancel();
-          }}
-          className="rounded-full"
-        >
-          {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-        </Button>
-      </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className={cn("flex-1 overflow-y-auto", variant === "overlay" ? "pb-20" : "")}>
         {state === "camera" && (
           <div className="flex flex-col items-center justify-center p-6 min-h-[60vh] animate-fade-in">
             {/* Mode Toggle - Compact Icons */}
