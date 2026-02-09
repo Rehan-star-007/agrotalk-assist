@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Volume2, VolumeX, Bird, AlertTriangle, Activity, Camera, Search, Upload, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Volume2, VolumeX, Bird, Activity, Camera, Search, Upload, ScanLine } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 
-type Mode = 'bird' | 'plant';
+type Mode = 'bird' | 'plant' | 'live_plant';
 type SubMode = 'camera' | 'search';
 
 export default function BirdDetectorPage() {
-    const { language, setIsImageOpen } = useApp();
+    const { setIsImageOpen } = useApp();
     const [mode, setMode] = useState<Mode>('bird');
     const [subMode, setSubMode] = useState<SubMode>('camera');
     const [isMuted, setIsMuted] = useState(false);
+
+    // Status for Bird/Plant detection
     const [status, setStatus] = useState<'safe' | 'detected'>('safe');
+    const [plantStatus, setPlantStatus] = useState<any>(null); // For live plant data
+
     const [lastDetected, setLastDetected] = useState<string | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -25,6 +29,7 @@ export default function BirdDetectorPage() {
         thumbnail: string;
         details: string;
         confidence: number;
+        type?: 'bird' | 'plant';
     }
     const [alerts, setAlerts] = useState<Alert[]>([]);
 
@@ -59,16 +64,16 @@ export default function BirdDetectorPage() {
         }
     };
 
-    // Initial connection check / keep-alive (Only needed for Bird Mode)
+    // Connection Check
     useEffect(() => {
-        if (mode !== 'bird') return;
-
         const checkConnection = async () => {
             try {
-                const res = await fetch('http://localhost:8000/api/bird/status');
+                // Check based on mode
+                const endpoint = mode === 'live_plant' ? 'plant' : 'bird';
+                const res = await fetch(`http://localhost:8000/api/${endpoint}/health`);
                 if (res.ok) setIsConnected(true);
             } catch (e) {
-                console.log("Bird backend not reachable yet");
+                console.log("Backend not reachable yet");
                 setIsConnected(false);
             }
         };
@@ -77,39 +82,51 @@ export default function BirdDetectorPage() {
         return () => clearInterval(interval);
     }, [mode]);
 
-    // Polling for status (Only for Bird Mode)
+    // Polling for status
     useEffect(() => {
-        if (mode !== 'bird' || !isConnected) return;
+        if ((mode !== 'bird' && mode !== 'live_plant') || !isConnected) return;
 
         const pollStatus = async () => {
             try {
-                const res = await fetch('http://localhost:8000/api/bird/status');
+                const endpoint = mode === 'live_plant' ? 'plant/status' : 'bird/status';
+                const res = await fetch(`http://localhost:8000/api/${endpoint}`);
                 const data = await res.json();
+
+                if (mode === 'live_plant') {
+                    setPlantStatus(data);
+                }
 
                 if (data.detected) {
                     setStatus('detected');
                     setLastDetected(new Date().toLocaleTimeString());
 
-                    // Add to alert log if new detection (simple throttle)
-                    if (status !== 'detected') {
-                        // Use real thumbnail from backend if available
+                    // Add detection to alerts if new matching criteria
+                    // Simple throttle by checking recent alerts or status change
+                    const isNewEvent = status !== 'detected' || (mode === 'live_plant' && data.status !== plantStatus?.status);
+
+                    if (isNewEvent && (Date.now() - (parseInt(alerts[0]?.id) || 0) > 2000)) {
                         const thumbnailSrc = data.thumbnail
                             ? `data:image/jpeg;base64,${data.thumbnail}`
-                            : "https://images.unsplash.com/photo-1552728089-57bdde30ebd1?q=80&w=200&auto=format&fit=crop";
+                            : (mode === 'bird'
+                                ? "https://images.unsplash.com/photo-1552728089-57bdde30ebd1?q=80&w=200&auto=format&fit=crop"
+                                : "https://images.unsplash.com/photo-1518977676651-71fa272b4052?q=80&w=200&auto=format&fit=crop"); // Plant placeholder
+
+                        const details = mode === 'bird' ? "Bird Detected" : `${data.crop}: ${data.status}`;
 
                         setAlerts(prev => [
                             {
                                 id: Date.now().toString(),
                                 timestamp: new Date().toLocaleTimeString(),
                                 thumbnail: thumbnailSrc,
-                                details: "Bird Detected",
-                                confidence: data.confidence || 0.95
+                                details: details,
+                                confidence: data.confidence || 0.95,
+                                type: (mode === 'bird' ? 'bird' : 'plant') as 'bird' | 'plant'
                             },
                             ...prev
-                        ].slice(0, 50)); // Keep last 50
+                        ].slice(0, 50));
                     }
 
-                    if (!isMuted && data.alert_active) {
+                    if (mode === 'bird' && !isMuted && data.alert_active) {
                         playBuzzer();
                     }
                 } else {
@@ -120,12 +137,19 @@ export default function BirdDetectorPage() {
             }
         };
 
-        const interval = setInterval(pollStatus, 500); // Poll every 500ms
+        const interval = setInterval(pollStatus, 500);
         return () => clearInterval(interval);
-    }, [isConnected, isMuted, mode]);
+    }, [isConnected, isMuted, mode, status, plantStatus]);
+
+    // Cleanup live stream when switching away
+    useEffect(() => {
+        return () => {
+            // Optional: Stop stream if needed, but keeping it warm might be better for UX
+            // fetch('http://localhost:8000/api/plant/stop', { method: 'POST' }).catch(e => console.error(e));
+        };
+    }, [mode]);
 
     // Advanced bird-scaring siren using AudioContext
-    // Uses multiple frequency sweeps that are known to scare birds
     const playBuzzer = () => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -133,55 +157,17 @@ export default function BirdDetectorPage() {
         const ctx = audioContextRef.current;
         const currentTime = ctx.currentTime;
 
-        // Create a multi-tone bird deterrent siren
-        // Birds are scared by sudden, loud, varying high-frequency sounds
-
-        // Oscillator 1: High-frequency sweep (hawk-like screech)
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sawtooth';
         osc1.frequency.setValueAtTime(2000, currentTime);
         osc1.frequency.exponentialRampToValueAtTime(4000, currentTime + 0.15);
-        osc1.frequency.exponentialRampToValueAtTime(1500, currentTime + 0.3);
-        osc1.frequency.exponentialRampToValueAtTime(3500, currentTime + 0.5);
         gain1.gain.setValueAtTime(0.4, currentTime);
         gain1.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.55);
         osc1.connect(gain1);
         gain1.connect(ctx.destination);
-
-        // Oscillator 2: Low pulse (startling bass)
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.type = 'square';
-        osc2.frequency.setValueAtTime(150, currentTime);
-        osc2.frequency.exponentialRampToValueAtTime(80, currentTime + 0.2);
-        gain2.gain.setValueAtTime(0.3, currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.25);
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-
-        // Oscillator 3: Warbling high tone (predator call)
-        const osc3 = ctx.createOscillator();
-        const gain3 = ctx.createGain();
-        osc3.type = 'sine';
-        osc3.frequency.setValueAtTime(3000, currentTime + 0.1);
-        osc3.frequency.exponentialRampToValueAtTime(5000, currentTime + 0.2);
-        osc3.frequency.exponentialRampToValueAtTime(2500, currentTime + 0.35);
-        osc3.frequency.exponentialRampToValueAtTime(4500, currentTime + 0.5);
-        gain3.gain.setValueAtTime(0, currentTime);
-        gain3.gain.linearRampToValueAtTime(0.35, currentTime + 0.1);
-        gain3.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.55);
-        osc3.connect(gain3);
-        gain3.connect(ctx.destination);
-
-        // Start all oscillators
         osc1.start(currentTime);
-        osc2.start(currentTime);
-        osc3.start(currentTime);
-
         osc1.stop(currentTime + 0.6);
-        osc2.stop(currentTime + 0.3);
-        osc3.stop(currentTime + 0.6);
     };
 
     return (
@@ -195,15 +181,15 @@ export default function BirdDetectorPage() {
 
                     <div className="flex flex-col items-center">
                         <h1 className="text-xl font-bold text-foreground">
-                            Scarecrow
+                            {mode === 'bird' ? 'Scarecrow' : (mode === 'live_plant' ? 'Live Analysis' : 'Photo Check')}
                         </h1>
                     </div>
 
                     <button
                         onClick={() => setIsMuted(!isMuted)}
                         className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-xl transition-all", // Removed opacity-0 and opacity-100 for better control
-                            mode === 'bird' ? "" : "invisible", // Use invisible to hide but keep layout
+                            "w-10 h-10 flex items-center justify-center rounded-xl transition-all",
+                            mode === 'bird' ? "" : "invisible",
                             isMuted ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
                         )}
                         disabled={mode !== 'bird'}
@@ -212,31 +198,43 @@ export default function BirdDetectorPage() {
                     </button>
                 </div>
 
-                {/* Primary Toggle: Camera (Plant) vs Bird */}
+                {/* Mode Toggle */}
                 <div className="flex justify-center mb-2">
                     <div className="bg-muted/50 p-1 rounded-full flex gap-1">
                         <button
                             onClick={() => setMode('plant')}
                             className={cn(
-                                "w-12 h-10 rounded-full flex items-center justify-center transition-all",
+                                "h-10 px-4 rounded-full flex items-center justify-center gap-2 transition-all font-medium text-sm",
                                 mode === 'plant' ? "bg-white shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <Camera size={20} />
+                            <Camera size={18} />
+                            Photo
+                        </button>
+                        <button
+                            onClick={() => setMode('live_plant')}
+                            className={cn(
+                                "h-10 px-4 rounded-full flex items-center justify-center gap-2 transition-all font-medium text-sm",
+                                mode === 'live_plant' ? "bg-white shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <ScanLine size={18} />
+                            Live
                         </button>
                         <button
                             onClick={() => setMode('bird')}
                             className={cn(
-                                "w-12 h-10 rounded-full flex items-center justify-center transition-all",
+                                "h-10 px-4 rounded-full flex items-center justify-center gap-2 transition-all font-medium text-sm",
                                 mode === 'bird' ? "bg-white shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <Bird size={20} />
+                            <Bird size={18} />
+                            Bird
                         </button>
                     </div>
                 </div>
 
-                {/* Secondary Toggle: Camera vs Search (Only in Plant Mode) */}
+                {/* Secondary Toggle (Only in Photo/Plant Mode) */}
                 {mode === 'plant' && (
                     <div className="flex justify-center animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="bg-muted/30 p-1 rounded-full flex gap-1 scale-90">
@@ -264,21 +262,19 @@ export default function BirdDetectorPage() {
             </header>
 
             <main className="flex-1 px-5 pt-5 pb-24 w-full max-w-[1600px] mx-auto">
-                {mode === 'bird' ? (
+                {mode === 'bird' || mode === 'live_plant' ? (
                     <div className="grid grid-cols-1 lg:grid-cols-[70fr_30fr] gap-8 items-start">
                         {/* Left Column: Video & Controls */}
                         <div className="space-y-6">
 
-
-                            {/* Status Card */}
-
-
                             {/* Video Feed */}
                             <div className={cn(
                                 "rounded-2xl overflow-hidden bg-black aspect-video relative shadow-lg group transition-all duration-300",
-                                status === 'detected' ? "border-4 border-red-500 shadow-red-500/20" : "border border-border/50"
+                                status === 'detected'
+                                    ? (mode === 'bird' ? "border-4 border-red-500 shadow-red-500/20" : "border-4 border-yellow-500 shadow-yellow-500/20")
+                                    : "border border-border/50"
                             )}>
-                                {!videoFile ? (
+                                {mode === 'bird' && !videoFile ? (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50 gap-4 bg-muted/10">
                                         <div className="p-4 rounded-full bg-white/5 border border-white/10">
                                             <Upload size={32} className="text-white/70" />
@@ -298,16 +294,20 @@ export default function BirdDetectorPage() {
                                         </label>
                                     </div>
                                 ) : (
-                                    isUploading ? (
+                                    (mode === 'bird' && isUploading) ? (
                                         <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50 gap-3">
                                             <Activity size={32} className="animate-pulse text-primary" />
                                             <p className="text-sm font-medium">Processing Video...</p>
                                         </div>
                                     ) : (
                                         <img
-                                            src="http://localhost:8000/api/bird/feed"
+                                            src={mode === 'live_plant' ? 'http://localhost:8000/api/plant/feed' : 'http://localhost:8000/api/bird/feed'}
                                             alt="Processed Video Feed"
                                             className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                // Handle broken image link (stream retry)
+                                                (e.target as HTMLImageElement).src = `http://localhost:8000/api/${mode === 'live_plant' ? 'plant' : 'bird'}/feed?t=${Date.now()}`;
+                                            }}
                                         />
                                     )
                                 )}
@@ -315,23 +315,34 @@ export default function BirdDetectorPage() {
                                 {/* Overlay Badges */}
                                 <div className="absolute top-4 left-4 flex gap-2">
                                     <div className="px-2 py-1 rounded-md bg-black/60 backdrop-blur-md flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                        <span className="text-xs font-bold text-white uppercase tracking-wider">Video Analysis</span>
+                                        <div className={cn("w-2 h-2 rounded-full animate-pulse", mode === 'bird' ? 'bg-red-500' : 'bg-[#76b900]')} />
+                                        <span className="text-xs font-bold text-white uppercase tracking-wider">{mode === 'bird' ? 'Bird Watch' : 'Live Analysis'}</span>
                                     </div>
                                     <div className="px-2 py-1 rounded-md bg-black/60 backdrop-blur-md">
                                         <span className="text-xs font-mono text-white/80">YOLOv8n</span>
                                     </div>
                                 </div>
 
-                                {/* Reset / Close Button for Video Mode */}
-                                {videoFile && !isUploading && (
+                                {/* Plant Mode Overlay Status */}
+                                {mode === 'live_plant' && status === 'detected' && plantStatus && (
+                                    <div className="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur-md rounded-xl p-3 border border-white/10 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                                        <div>
+                                            <div className="text-xs text-white/60 mb-0.5">{plantStatus?.crop || "Detecting..."}</div>
+                                            <div className={cn("text-lg font-bold", plantStatus?.is_healthy ? "text-green-400" : "text-yellow-400")}>
+                                                {plantStatus?.status || "Analyzing..."}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-xs text-white/60 mb-0.5">Confidence</div>
+                                            <div className="text-lg font-mono text-white">{plantStatus?.confidence ? plantStatus.confidence.toFixed(0) : 0}%</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {videoFile && !isUploading && mode === 'bird' && (
                                     <button
                                         onClick={async () => {
-                                            try {
-                                                await fetch('http://localhost:8000/api/bird/reset', { method: 'POST' });
-                                            } catch (e) {
-                                                console.log('Reset call failed:', e);
-                                            }
+                                            try { await fetch('http://localhost:8000/api/bird/reset', { method: 'POST' }); } catch (e) { }
                                             setVideoFile(null);
                                             setIsConnected(false);
                                             setStatus('safe');
@@ -339,25 +350,10 @@ export default function BirdDetectorPage() {
                                         }}
                                         className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white/70 hover:text-white hover:bg-black/80 backdrop-blur-md transition-all z-10"
                                     >
-                                        <Search size={16} className="rotate-45" /> {/* Close Icon style */}
+                                        <Search size={16} className="rotate-45" />
                                     </button>
                                 )}
                             </div>
-
-                            {/* Controls / Info */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-                                    <div className="text-sm text-muted-foreground mb-1">Deterrent Sound</div>
-                                    <div className="text-lg font-semibold text-foreground">
-                                        {isMuted ? "Off" : "High Freq"}
-                                    </div>
-                                </div>
-                                <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-                                    <div className="text-sm text-muted-foreground mb-1">Cooldown</div>
-                                    <div className="text-lg font-semibold text-foreground">5 Seconds</div>
-                                </div>
-                            </div>
-
                         </div>
 
                         {/* Right Column: Recent Alerts Panel */}
@@ -366,7 +362,7 @@ export default function BirdDetectorPage() {
                                 <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/30 flex-shrink-0">
                                     <h3 className="font-bold text-foreground flex items-center gap-2">
                                         <Activity size={18} className="text-primary" />
-                                        Recent Alerts
+                                        Activity Log
                                     </h3>
                                     <span className="text-xs font-mono text-muted-foreground bg-background px-2 py-1 rounded-md border border-border/50">
                                         {alerts.length} Events
@@ -377,15 +373,14 @@ export default function BirdDetectorPage() {
                                     {alerts.length > 0 ? (
                                         alerts.map((alert) => (
                                             <div key={alert.id} className="flex gap-3 p-2 rounded-xl hover:bg-muted/50 transition-colors group">
-                                                {/* Thumbnail */}
                                                 <div className="w-20 h-14 rounded-lg bg-black/10 overflow-hidden flex-shrink-0 relative">
                                                     <img src={alert.thumbnail} alt="Alert" className="w-full h-full object-cover" />
-                                                    <div className="absolute inset-0 bg-red-500/10 mix-blend-overlay" />
+                                                    <div className={cn("absolute inset-0 mix-blend-overlay", alert.type === 'bird' ? 'bg-red-500/10' : 'bg-green-500/10')} />
                                                 </div>
 
                                                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-xs font-bold text-red-600 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded flex items-center gap-1", alert.type === 'bird' ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20')}>
                                                             {(alert.confidence * 100).toFixed(0)}%
                                                         </span>
                                                         <span className="text-[10px] text-muted-foreground font-mono">
@@ -393,8 +388,8 @@ export default function BirdDetectorPage() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                                                        <span className="text-sm font-medium text-foreground truncate">Video analysis - {alert.details}</span>
+                                                        <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", alert.type === 'bird' ? 'bg-red-500' : 'bg-green-500')} />
+                                                        <span className="text-sm font-medium text-foreground truncate">{alert.details}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -402,9 +397,9 @@ export default function BirdDetectorPage() {
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-2 opacity-60">
                                             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                                                <Bird size={24} />
+                                                <Activity size={24} />
                                             </div>
-                                            No alerts detected yet
+                                            No activity detected yet
                                         </div>
                                     )}
                                 </div>
@@ -412,7 +407,7 @@ export default function BirdDetectorPage() {
                         </div>
                     </div>
                 ) : (
-                    /* Plant Scanner UI */
+                    /* Plant Photo Scanner UI (EXISTING) */
                     <div className="max-w-lg mx-auto flex flex-col items-center justify-center gap-8 py-10 animate-in fade-in zoom-in-95 duration-300">
                         {/* Frame Area */}
                         <div className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-primary/30 bg-muted/20 flex flex-col items-center justify-center gap-4 relative overflow-hidden group hover:border-primary/50 transition-colors">

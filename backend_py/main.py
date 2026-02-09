@@ -35,6 +35,10 @@ app.add_middleware(
 # Include Bird Detection routes
 app.include_router(bird_router)
 
+# Include Plant Stream routes
+from plant_server import router as plant_router
+app.include_router(plant_router)
+
 detector: Optional[PlantDiseaseDetector] = None
 nvidia_service: Optional[NvidiaVisionService] = None
 
